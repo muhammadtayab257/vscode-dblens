@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta
+        http-equiv="Content-Security-Policy"
+        content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';"
+    >
+    <title>Table View</title>
+    <style>
+        /* ── Reset & Base ──────────────────────────────── */
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--vscode-editor-background);
+            color: var(--vscode-editor-foreground);
+            font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+            font-size: var(--vscode-font-size, 13px);
+            line-height: 1.4;
+        }
+
+        /* ── Layout Shell ──────────────────────────────── */
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* ── Toolbar ───────────────────────────────────── */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background-color: var(--vscode-sideBar-background, var(--vscode-editor-background));
+            border-bottom: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, #3c3c3c));
+            flex-shrink: 0;
+        }
+
+        .toolbar .table-name {
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--vscode-editor-foreground);
+            margin-right: 12px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 260px;
+        }
+
+        .search-wrapper {
+            position: relative;
+            flex: 1;
+            max-width: 360px;
+        }
+
+        .search-wrapper .search-icon {
+            position: absolute;
+            left: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--vscode-input-placeholderForeground);
+            pointer-events: none;
+            font-size: 13px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 5px 10px 5px 28px;
+            background-color: var(--vscode-input-background);
+            border: 1px solid var(--vscode-input-border, transparent);
+            border-radius: 4px;
+            color: var(--vscode-input-foreground);
+            font-size: 13px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+
+        .search-input::placeholder {
+            color: var(--vscode-input-placeholderForeground);
+        }
+
+        .search-input:focus {
+            border-color: var(--vscode-focusBorder);
+        }
+
+        .toolbar-spacer {
+            flex: 1;
+        }
+
+        .toolbar-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 10px;
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: inherit;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background-color 0.15s;
+        }
+
+        .toolbar-btn:hover {
+            background-color: var(--vscode-button-hoverBackground);
+        }
+
+        .toolbar-btn.secondary {
+            background-color: var(--vscode-button-secondaryBackground, #3c3c3c);
+            color: var(--vscode-button-secondaryForeground, #ccc);
+        }
+
+        .toolbar-btn.secondary:hover {
+            background-color: var(--vscode-button-secondaryHoverBackground, #505050);
+        }
+
+        /* ── Table Container (scrollable) ──────────────── */
+        .table-container {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+        }
+
+        /* ── Data Grid ─────────────────────────────────── */
+        table.data-grid {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: auto;
+            min-width: max-content;
+        }
+
+        table.data-grid thead {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+
+        table.data-grid th {
+            background-color: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-sideBar-background));
+            color: var(--vscode-editor-foreground);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            padding: 8px 14px;
+            border-bottom: 2px solid var(--vscode-focusBorder);
+            border-right: 1px solid var(--vscode-widget-border, #3c3c3c);
+            text-align: left;
+            white-space: nowrap;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            transition: background-color 0.1s;
+        }
+
+        table.data-grid th:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+
+        table.data-grid th:last-child {
+            border-right: none;
+        }
+
+        .sort-arrow {
+            display: inline-block;
+            margin-left: 6px;
+            font-size: 10px;
+            color: var(--vscode-focusBorder);
+            vertical-align: middle;
+        }
+
+        table.data-grid td {
+            padding: 6px 14px;
+            border-bottom: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.2));
+            border-right: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.1));
+            font-family: var(--vscode-editor-font-family, 'Cascadia Code', 'Fira Code', 'Consolas', monospace);
+            font-size: var(--vscode-editor-font-size, 12.5px);
+            white-space: nowrap;
+            max-width: 400px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            cursor: default;
+            transition: background-color 0.05s;
+        }
+
+        table.data-grid td:last-child {
+            border-right: none;
+        }
+
+        table.data-grid tbody tr {
+            transition: background-color 0.08s;
+        }
+
+        table.data-grid tbody tr:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+
+        table.data-grid tbody tr:nth-child(even) {
+            background-color: var(--vscode-editorGroupHeader-tabsBackground, rgba(128,128,128,0.04));
+        }
+
+        table.data-grid tbody tr:nth-child(even):hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+
+        /* ── Cell click highlight ─────────────────────── */
+        table.data-grid td.cell-clicked {
+            outline: 2px solid var(--vscode-focusBorder);
+            outline-offset: -2px;
+        }
+
+        .cell-null {
+            color: var(--vscode-descriptionForeground, #6a6a6a);
+            font-style: italic;
+        }
+
+        .cell-number {
+            color: var(--vscode-debugTokenExpression-number, #b5cea8);
+            text-align: right;
+        }
+
+        .cell-boolean {
+            color: var(--vscode-debugTokenExpression-boolean, #569cd6);
+        }
+
+        /* ── Row number column ─────────────────────────── */
+        table.data-grid th.row-num,
+        table.data-grid td.row-num {
+            color: var(--vscode-editorLineNumber-foreground, #6a6a6a);
+            text-align: right;
+            padding-right: 10px;
+            padding-left: 10px;
+            font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
+            font-size: 11px;
+            border-right: 2px solid var(--vscode-widget-border, #3c3c3c);
+            cursor: default;
+            width: 55px;
+            min-width: 55px;
+            user-select: none;
+        }
+
+        table.data-grid th.row-num {
+            text-transform: none;
+            letter-spacing: normal;
+            font-weight: normal;
+        }
+
+        /* ── Pagination ────────────────────────────────── */
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            padding: 8px 12px;
+            background-color: var(--vscode-sideBar-background, var(--vscode-editor-background));
+            border-top: 1px solid var(--vscode-widget-border, #3c3c3c);
+            flex-shrink: 0;
+        }
+
+        .page-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 32px;
+            height: 28px;
+            padding: 0 8px;
+            background-color: var(--vscode-button-secondaryBackground, #3c3c3c);
+            color: var(--vscode-button-secondaryForeground, #ccc);
+            border: 1px solid var(--vscode-widget-border, #4c4c4c);
+            border-radius: 3px;
+            font-size: 12px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background-color 0.1s, border-color 0.1s;
+        }
+
+        .page-btn:hover:not(:disabled) {
+            background-color: var(--vscode-button-secondaryHoverBackground, #505050);
+        }
+
+        .page-btn:disabled {
+            opacity: 0.4;
+            cursor: default;
+        }
+
+        .page-btn.active {
+            background-color: var(--vscode-button-background);
+            border-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            font-weight: 600;
+        }
+
+        .page-ellipsis {
+            color: var(--vscode-descriptionForeground, #6a6a6a);
+            padding: 0 4px;
+            font-size: 12px;
+            user-select: none;
+        }
+
+        /* ── Status Bar ────────────────────────────────── */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 4px 12px;
+            background-color: var(--vscode-statusBar-background, #007acc);
+            color: var(--vscode-statusBar-foreground, #fff);
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+
+        .status-bar .status-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            white-space: nowrap;
+        }
+
+        .status-bar .status-spacer {
+            flex: 1;
+        }
+
+        /* ── Loading Overlay ───────────────────────────── */
+        .loading-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--vscode-editor-background);
+            opacity: 0.85;
+            z-index: 10;
+        }
+
+        .loading-overlay.hidden {
+            display: none;
+        }
+
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid var(--vscode-widget-border, #3c3c3c);
+            border-top-color: var(--vscode-focusBorder, #007acc);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ── Error Banner ──────────────────────────────── */
+        .error-banner {
+            padding: 10px 14px;
+            background-color: var(--vscode-inputValidation-errorBackground, #5a1d1d);
+            border-bottom: 1px solid var(--vscode-inputValidation-errorBorder, #8b3030);
+            color: var(--vscode-errorForeground, #f48771);
+            font-size: 13px;
+            flex-shrink: 0;
+        }
+
+        .error-banner.hidden {
+            display: none;
+        }
+
+        /* ── Empty State ───────────────────────────────── */
+        .empty-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            color: var(--vscode-descriptionForeground, #6a6a6a);
+            font-size: 14px;
+        }
+
+        .empty-state.hidden {
+            display: none;
+        }
+
+        /* ── Copy Toast ────────────────────────────────── */
+        .copy-toast {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background-color: var(--vscode-editorWidget-background, #252526);
+            color: var(--vscode-editorWidget-foreground, #ccc);
+            border: 1px solid var(--vscode-widget-border, #454545);
+            border-radius: 4px;
+            padding: 6px 14px;
+            font-size: 12px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s, transform 0.2s;
+            z-index: 100;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .copy-toast.visible {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- Toolbar -->
+        <div class="toolbar">
+            <span class="table-name" id="tableName">Table</span>
+            <div class="search-wrapper">
+                <span class="search-icon">&#128269;</span>
+                <input
+                    type="text"
+                    class="search-input"
+                    id="searchInput"
+                    placeholder="Filter rows..."
+                    spellcheck="false"
+                    autocomplete="off"
+                >
+            </div>
+            <div class="toolbar-spacer"></div>
+            <button class="toolbar-btn secondary" id="refreshBtn" title="Refresh data">&#x21bb; Refresh</button>
+            <button class="toolbar-btn" id="exportBtn" title="Export to CSV">&#x2913; Export CSV</button>
+        </div>
+
+        <!-- Error Banner -->
+        <div class="error-banner hidden" id="errorBanner"></div>
+
+        <!-- Table Container -->
+        <div class="table-container" id="tableContainer">
+            <div class="loading-overlay hidden" id="loadingOverlay">
+                <div class="spinner"></div>
+            </div>
+            <table class="data-grid" id="dataGrid">
+                <thead id="gridHead"></thead>
+                <tbody id="gridBody"></tbody>
+            </table>
+            <div class="empty-state hidden" id="emptyState">No data to display.</div>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination" id="pagination"></div>
+
+        <!-- Status Bar -->
+        <div class="status-bar" id="statusBar">
+            <span class="status-item" id="statusRows">Rows: --</span>
+            <span class="status-item" id="statusPage">Page: --</span>
+            <span class="status-item" id="statusExecTime">Time: --</span>
+            <span class="status-spacer"></span>
+            <span class="status-item" id="statusPageSize">50 rows/page</span>
+        </div>
+    </div>
+
+    <!-- Copy Toast -->
+    <div class="copy-toast" id="copyToast">Copied!</div>
+
+    <script>
+        // ── VS Code API ──────────────────────────────────
+        const vscode = acquireVsCodeApi();
+
+        // ── State ────────────────────────────────────────
+        let state = {
+            columns: [],
+            rows: [],
+            totalRows: 0,
+            page: 1,
+            pageSize: 50,
+            totalPages: 1,
+            sortColumn: null,
+            sortDirection: null,
+            executionTimeMs: 0,
+            tableName: 'Table',
+        };
+
+        // ── DOM Refs ─────────────────────────────────────
+        const tableName     = document.getElementById('tableName');
+        const searchInput   = document.getElementById('searchInput');
+        const refreshBtn    = document.getElementById('refreshBtn');
+        const exportBtn     = document.getElementById('exportBtn');
+        const errorBanner   = document.getElementById('errorBanner');
+        const tableContainer= document.getElementById('tableContainer');
+        const loadingOverlay= document.getElementById('loadingOverlay');
+        const gridHead      = document.getElementById('gridHead');
+        const gridBody      = document.getElementById('gridBody');
+        const emptyState    = document.getElementById('emptyState');
+        const pagination    = document.getElementById('pagination');
+        const statusRows    = document.getElementById('statusRows');
+        const statusPage    = document.getElementById('statusPage');
+        const statusExecTime= document.getElementById('statusExecTime');
+        const copyToast     = document.getElementById('copyToast');
+
+        // ── Helpers ──────────────────────────────────────
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return str;
+            const s = String(str);
+            return s
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function formatNumber(n) {
+            return Number(n).toLocaleString();
+        }
+
+        function isNumeric(val) {
+            if (val === null || val === undefined || val === '') return false;
+            return !isNaN(Number(val)) && isFinite(val);
+        }
+
+        function isBoolean(val) {
+            if (typeof val === 'boolean') return true;
+            if (typeof val === 'string') {
+                const lower = val.toLowerCase();
+                return lower === 'true' || lower === 'false';
+            }
+            return false;
+        }
+
+        // ── Copy Toast ───────────────────────────────────
+        let toastTimeout = null;
+        function showCopyToast(text) {
+            copyToast.textContent = text || 'Copied!';
+            copyToast.classList.add('visible');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(function() {
+                copyToast.classList.remove('visible');
+            }, 1500);
+        }
+
+        // ── Render Table Head ────────────────────────────
+        function renderHead() {
+            let html = '<tr><th class="row-num">#</th>';
+            state.columns.forEach(function(col) {
+                let arrow = '';
+                if (state.sortColumn === col) {
+                    arrow = state.sortDirection === 'ASC'
+                        ? '<span class="sort-arrow">&#9650;</span>'
+                        : '<span class="sort-arrow">&#9660;</span>';
+                }
+                html += '<th data-column="' + escapeHtml(col) + '">'
+                    + escapeHtml(col)
+                    + arrow
+                    + '</th>';
+            });
+            html += '</tr>';
+            gridHead.innerHTML = html;
+        }
+
+        // ── Render Table Body ────────────────────────────
+        function renderBody() {
+            if (!state.rows || state.rows.length === 0) {
+                gridBody.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            emptyState.classList.add('hidden');
+
+            const startIdx = (state.page - 1) * state.pageSize;
+            let html = '';
+
+            state.rows.forEach(function(row, i) {
+                html += '<tr>';
+                html += '<td class="row-num">' + (startIdx + i + 1) + '</td>';
+                state.columns.forEach(function(col) {
+                    const val = row[col];
+                    if (val === null || val === undefined) {
+                        html += '<td class="cell-null" data-raw="">NULL</td>';
+                    } else if (isBoolean(val)) {
+                        html += '<td class="cell-boolean" data-raw="' + escapeHtml(val) + '">' + escapeHtml(val) + '</td>';
+                    } else if (isNumeric(val)) {
+                        html += '<td class="cell-number" data-raw="' + escapeHtml(val) + '">' + escapeHtml(val) + '</td>';
+                    } else {
+                        html += '<td data-raw="' + escapeHtml(val) + '">' + escapeHtml(val) + '</td>';
+                    }
+                });
+                html += '</tr>';
+            });
+
+            gridBody.innerHTML = html;
+        }
+
+        // ── Render Pagination ────────────────────────────
+        function renderPagination() {
+            const total = state.totalPages;
+            const current = state.page;
+
+            if (total <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+
+            let html = '';
+
+            html += '<button class="page-btn" id="prevPageBtn"'
+                + (current <= 1 ? ' disabled' : '')
+                + '>&laquo; Prev</button>';
+
+            const pages = buildPageNumbers(current, total);
+            pages.forEach(function(p) {
+                if (p === '...') {
+                    html += '<span class="page-ellipsis">...</span>';
+                } else {
+                    html += '<button class="page-btn'
+                        + (p === current ? ' active' : '')
+                        + '" data-page="' + p + '">'
+                        + p + '</button>';
+                }
+            });
+
+            html += '<button class="page-btn" id="nextPageBtn"'
+                + (current >= total ? ' disabled' : '')
+                + '>Next &raquo;</button>';
+
+            pagination.innerHTML = html;
+        }
+
+        function buildPageNumbers(current, total) {
+            if (total <= 7) {
+                const arr = [];
+                for (let i = 1; i <= total; i++) arr.push(i);
+                return arr;
+            }
+
+            const pages = [];
+            const windowSize = 1;
+            pages.push(1);
+
+            const rangeStart = Math.max(2, current - windowSize);
+            const rangeEnd = Math.min(total - 1, current + windowSize);
+
+            if (rangeStart > 2) pages.push('...');
+            for (let i = rangeStart; i <= rangeEnd; i++) pages.push(i);
+            if (rangeEnd < total - 1) pages.push('...');
+
+            pages.push(total);
+            return pages;
+        }
+
+        // ── Render Status Bar ────────────────────────────
+        function renderStatus() {
+            statusRows.textContent = 'Rows: ' + formatNumber(state.totalRows);
+            statusPage.textContent = 'Page ' + state.page + ' of ' + state.totalPages;
+            statusExecTime.textContent = 'Time: ' + state.executionTimeMs + ' ms';
+        }
+
+        // ── Full Render ──────────────────────────────────
+        function render() {
+            tableName.textContent = state.tableName || 'Table';
+            tableName.title = state.tableName || 'Table';
+            renderHead();
+            renderBody();
+            renderPagination();
+            renderStatus();
+            hideLoading();
+        }
+
+        // ── Loading ──────────────────────────────────────
+        function showLoading() {
+            loadingOverlay.classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            loadingOverlay.classList.add('hidden');
+        }
+
+        function showError(msg) {
+            errorBanner.textContent = msg;
+            errorBanner.classList.remove('hidden');
+        }
+
+        function hideError() {
+            errorBanner.classList.add('hidden');
+        }
+
+        // ── Post Message to Extension ────────────────────
+        function send(message) {
+            vscode.postMessage(message);
+        }
+
+        // ── Event: Column Header Click (Sort) ────────────
+        gridHead.addEventListener('click', function(e) {
+            const th = e.target.closest('th[data-column]');
+            if (!th) return;
+            const column = th.getAttribute('data-column');
+            if (!column) return;
+            showLoading();
+            send({ type: 'sort', column: column });
+        });
+
+        // ── Event: Cell Click (Copy) ─────────────────────
+        let clickedCell = null;
+        gridBody.addEventListener('click', function(e) {
+            const td = e.target.closest('td:not(.row-num)');
+            if (!td) return;
+
+            // Remove previous highlight
+            if (clickedCell) clickedCell.classList.remove('cell-clicked');
+            td.classList.add('cell-clicked');
+            clickedCell = td;
+
+            // Copy raw value
+            const raw = td.getAttribute('data-raw');
+            if (raw !== null && raw !== '') {
+                navigator.clipboard.writeText(raw).then(function() {
+                    showCopyToast('Copied to clipboard');
+                }).catch(function() {});
+            }
+        });
+
+        // ── Event: Pagination Clicks ─────────────────────
+        pagination.addEventListener('click', function(e) {
+            const btn = e.target.closest('button');
+            if (!btn || btn.disabled) return;
+
+            if (btn.id === 'prevPageBtn') {
+                showLoading();
+                send({ type: 'prevPage' });
+            } else if (btn.id === 'nextPageBtn') {
+                showLoading();
+                send({ type: 'nextPage' });
+            } else if (btn.dataset.page) {
+                const page = parseInt(btn.dataset.page, 10);
+                if (page !== state.page) {
+                    showLoading();
+                    send({ type: 'goToPage', page: page });
+                }
+            }
+        });
+
+        // ── Event: Search Input (debounced) ──────────────
+        let searchTimeout = null;
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(function() {
+                showLoading();
+                send({ type: 'filter', filter: searchInput.value });
+            }, 300);
+        });
+
+        // ── Event: Refresh ───────────────────────────────
+        refreshBtn.addEventListener('click', function() {
+            showLoading();
+            hideError();
+            send({ type: 'refresh' });
+        });
+
+        // ── Event: Export CSV ────────────────────────────
+        exportBtn.addEventListener('click', function() {
+            send({ type: 'export' });
+        });
+
+        // ── Message Handler from Extension ───────────────
+        window.addEventListener('message', function(event) {
+            const msg = event.data;
+            if (!msg || !msg.type) return;
+
+            switch (msg.type) {
+                case 'data':
+                    hideError();
+                    state.columns       = msg.columns       || [];
+                    state.rows          = msg.rows           || [];
+                    state.totalRows     = msg.totalRows      || 0;
+                    state.page          = msg.page           || 1;
+                    state.pageSize      = msg.pageSize       || 50;
+                    state.totalPages    = msg.totalPages     || 1;
+                    state.sortColumn    = msg.sortColumn     || null;
+                    state.sortDirection = msg.sortDirection   || null;
+                    state.executionTimeMs = msg.executionTimeMs || 0;
+                    state.tableName     = msg.tableName       || 'Table';
+                    render();
+                    tableContainer.scrollTop = 0;
+                    break;
+
+                case 'error':
+                    hideLoading();
+                    showError(msg.message || 'An unknown error occurred.');
+                    break;
+
+                default:
+                    break;
+            }
+        });
+
+        // ── Keyboard Shortcuts ───────────────────────────
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                e.preventDefault();
+                searchInput.focus();
+                searchInput.select();
+                return;
+            }
+
+            if (document.activeElement === searchInput) return;
+
+            if (e.key === 'ArrowLeft' && state.page > 1) {
+                showLoading();
+                send({ type: 'prevPage' });
+            }
+            if (e.key === 'ArrowRight' && state.page < state.totalPages) {
+                showLoading();
+                send({ type: 'nextPage' });
+            }
+        });
+
+        // ── Initial State ────────────────────────────────
+        showLoading();
+    </script>
+</body>
+</html>

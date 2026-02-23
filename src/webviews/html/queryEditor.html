@@ -1,0 +1,1241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta
+        http-equiv="Content-Security-Policy"
+        content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';"
+    />
+    <title>SQL Editor</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--vscode-editor-background);
+            color: var(--vscode-editor-foreground);
+            font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+            font-size: var(--vscode-font-size, 13px);
+        }
+
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* ── Toolbar ────────────────────────────────────── */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            background-color: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-sideBar-background));
+            border-bottom: 1px solid var(--vscode-widget-border, #3c3c3c);
+            flex-shrink: 0;
+        }
+
+        .toolbar-group {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .toolbar-separator {
+            width: 1px;
+            height: 20px;
+            background-color: var(--vscode-widget-border, #3c3c3c);
+            margin: 0 6px;
+        }
+
+        .toolbar-spacer { flex: 1; }
+
+        .toolbar-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: inherit;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background-color 0.12s, opacity 0.12s;
+        }
+
+        .toolbar-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+        .toolbar-btn.primary {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+        }
+        .toolbar-btn.primary:hover:not(:disabled) {
+            background-color: var(--vscode-button-hoverBackground);
+        }
+
+        .toolbar-btn.secondary {
+            background-color: var(--vscode-button-secondaryBackground, #3c3c3c);
+            color: var(--vscode-button-secondaryForeground, #ccc);
+        }
+        .toolbar-btn.secondary:hover:not(:disabled) {
+            background-color: var(--vscode-button-secondaryHoverBackground, #505050);
+        }
+
+        .toolbar-btn.icon-only {
+            padding: 5px 7px;
+            background: transparent;
+            color: var(--vscode-editor-foreground);
+            font-size: 15px;
+            line-height: 1;
+        }
+        .toolbar-btn.icon-only:hover:not(:disabled) {
+            background-color: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.15));
+        }
+
+        /* ── Connection Selector ────────────────────────── */
+        .conn-select {
+            padding: 4px 8px;
+            background-color: var(--vscode-input-background);
+            border: 1px solid var(--vscode-input-border, transparent);
+            border-radius: 4px;
+            color: var(--vscode-input-foreground);
+            font-size: 12px;
+            font-family: inherit;
+            outline: none;
+            min-width: 160px;
+            cursor: pointer;
+        }
+        .conn-select:focus {
+            border-color: var(--vscode-focusBorder);
+        }
+
+        /* ── Split Panes ────────────────────────────────── */
+        .split-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        .editor-pane {
+            flex: 0 0 auto;
+            height: 200px;
+            min-height: 80px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .resize-handle {
+            flex-shrink: 0;
+            height: 5px;
+            background-color: var(--vscode-sash-hoverBorder, var(--vscode-widget-border, #3c3c3c));
+            cursor: ns-resize;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+        .resize-handle:hover, .resize-handle.active {
+            opacity: 1;
+        }
+
+        .results-pane {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-height: 60px;
+        }
+
+        /* ── SQL Editor Area ─────────────────────────────── */
+        .editor-wrapper {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .line-numbers {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 44px;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--vscode-editorGutter-background, var(--vscode-editor-background));
+            border-right: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.2));
+            padding-top: 10px;
+            user-select: none;
+            z-index: 1;
+        }
+
+        .line-numbers .line-num {
+            display: block;
+            text-align: right;
+            padding-right: 8px;
+            font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
+            font-size: var(--vscode-editor-font-size, 13px);
+            line-height: 20px;
+            color: var(--vscode-editorLineNumber-foreground, #858585);
+        }
+
+        .sql-textarea {
+            width: 100%;
+            height: 100%;
+            padding: 10px 12px 10px 52px;
+            background-color: var(--vscode-editor-background);
+            color: var(--vscode-editor-foreground);
+            border: none;
+            outline: none;
+            resize: none;
+            font-family: var(--vscode-editor-font-family, 'Cascadia Code', 'Fira Code', 'Consolas', monospace);
+            font-size: var(--vscode-editor-font-size, 13px);
+            line-height: 20px;
+            tab-size: 2;
+            white-space: pre;
+            overflow: auto;
+        }
+
+        .sql-textarea::placeholder {
+            color: var(--vscode-input-placeholderForeground);
+        }
+
+        .sql-textarea::selection {
+            background-color: var(--vscode-editor-selectionBackground, rgba(38, 79, 120, 0.7));
+        }
+
+        /* ── Results Section ─────────────────────────────── */
+        .results-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 4px 10px;
+            background-color: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-sideBar-background));
+            border-bottom: 1px solid var(--vscode-widget-border, #3c3c3c);
+            border-top: 1px solid var(--vscode-widget-border, #3c3c3c);
+            flex-shrink: 0;
+            font-size: 12px;
+            min-height: 28px;
+        }
+
+        .results-header .tab {
+            padding: 4px 10px;
+            color: var(--vscode-descriptionForeground);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: color 0.1s, border-color 0.1s;
+        }
+        .results-header .tab.active {
+            color: var(--vscode-editor-foreground);
+            border-bottom-color: var(--vscode-focusBorder);
+        }
+
+        .results-stats {
+            margin-left: auto;
+            color: var(--vscode-descriptionForeground);
+            font-size: 11px;
+            display: flex;
+            gap: 12px;
+        }
+
+        .results-stats span {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+        }
+
+        .results-content {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+        }
+
+        /* ── Results Table ────────────────────────────────── */
+        .result-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: auto;
+            min-width: max-content;
+            font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
+            font-size: var(--vscode-editor-font-size, 12px);
+        }
+
+        .result-table thead {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+
+        .result-table th {
+            background-color: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-sideBar-background));
+            color: var(--vscode-textLink-foreground, #4fc1ff);
+            font-weight: 600;
+            text-align: left;
+            padding: 5px 12px;
+            border-bottom: 2px solid var(--vscode-widget-border, #404040);
+            border-right: 1px solid var(--vscode-widget-border, #3c3c3c);
+            white-space: nowrap;
+            user-select: none;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .result-table th:last-child { border-right: none; }
+
+        .result-table th.row-num,
+        .result-table td.row-num {
+            color: var(--vscode-editorLineNumber-foreground, #858585);
+            text-align: right;
+            padding-right: 8px;
+            width: 1%;
+            white-space: nowrap;
+            background-color: var(--vscode-editorGutter-background, var(--vscode-editor-background));
+            border-right: 2px solid var(--vscode-widget-border, #404040);
+            user-select: none;
+            font-size: 11px;
+        }
+
+        .result-table td {
+            padding: 3px 12px;
+            border-right: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.1));
+            border-bottom: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.15));
+            white-space: nowrap;
+            max-width: 350px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            cursor: default;
+        }
+
+        .result-table td:last-child { border-right: none; }
+
+        .result-table tbody tr:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+
+        .result-table tbody tr:nth-child(even) {
+            background-color: var(--vscode-editorGroupHeader-tabsBackground, rgba(128,128,128,0.04));
+        }
+
+        .result-table td.cell-clicked {
+            outline: 2px solid var(--vscode-focusBorder);
+            outline-offset: -2px;
+        }
+
+        .null-val {
+            color: var(--vscode-descriptionForeground);
+            font-style: italic;
+        }
+
+        /* ── Empty / Loading / Error States ──────────────── */
+        .state-message {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            gap: 12px;
+            color: var(--vscode-descriptionForeground);
+            font-size: 13px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .state-message.hidden { display: none; }
+
+        .state-icon {
+            font-size: 32px;
+            opacity: 0.5;
+        }
+
+        .spinner-results {
+            width: 28px;
+            height: 28px;
+            border: 3px solid var(--vscode-widget-border, #3c3c3c);
+            border-top-color: var(--vscode-focusBorder);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .error-box {
+            background-color: var(--vscode-inputValidation-errorBackground, #332222);
+            border: 1px solid var(--vscode-inputValidation-errorBorder, #f14c4c);
+            border-left: 4px solid var(--vscode-inputValidation-errorBorder, #f14c4c);
+            border-radius: 3px;
+            padding: 10px 14px;
+            max-width: 600px;
+            width: 100%;
+            text-align: left;
+        }
+
+        .error-box .err-title {
+            color: var(--vscode-errorForeground, #f14c4c);
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .error-box .err-msg {
+            color: var(--vscode-errorForeground, #e88e8e);
+            font-family: var(--vscode-editor-font-family, monospace);
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            opacity: 0.9;
+        }
+
+        /* ── Query History ────────────────────────────────── */
+        .history-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .history-item {
+            padding: 8px 10px;
+            margin-bottom: 4px;
+            background-color: var(--vscode-input-background);
+            border: 1px solid var(--vscode-widget-border, transparent);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.1s;
+        }
+
+        .history-item:hover {
+            background-color: var(--vscode-list-hoverBackground);
+            border-color: var(--vscode-focusBorder);
+        }
+
+        .history-item .h-sql {
+            font-family: var(--vscode-editor-font-family, monospace);
+            font-size: 12px;
+            color: var(--vscode-editor-foreground);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .history-item .h-meta {
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            margin-top: 2px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .history-empty {
+            color: var(--vscode-descriptionForeground);
+            text-align: center;
+            padding: 20px;
+            font-size: 12px;
+        }
+
+        /* ── Autocomplete ────────────────────────────────── */
+        .autocomplete-popup {
+            position: fixed;
+            background-color: var(--vscode-editorSuggestWidget-background, var(--vscode-editorWidget-background, #252526));
+            border: 1px solid var(--vscode-editorSuggestWidget-border, var(--vscode-widget-border, #454545));
+            border-radius: 3px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+            max-height: 180px;
+            overflow-y: auto;
+            z-index: 999;
+            min-width: 160px;
+            max-width: 300px;
+            display: none;
+        }
+
+        .autocomplete-popup.visible { display: block; }
+
+        .ac-item {
+            padding: 4px 10px;
+            cursor: pointer;
+            font-family: var(--vscode-editor-font-family, monospace);
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--vscode-editorSuggestWidget-foreground, var(--vscode-editor-foreground));
+        }
+
+        .ac-item:hover, .ac-item.selected {
+            background-color: var(--vscode-editorSuggestWidget-selectedBackground, var(--vscode-list-activeSelectionBackground));
+            color: var(--vscode-editorSuggestWidget-highlightForeground, var(--vscode-list-activeSelectionForeground));
+        }
+
+        .ac-icon {
+            font-size: 10px;
+            width: 16px;
+            text-align: center;
+            flex-shrink: 0;
+            opacity: 0.7;
+        }
+
+        .ac-icon.table { color: var(--vscode-symbolIcon-classForeground, #ee9d28); }
+        .ac-icon.column { color: var(--vscode-symbolIcon-fieldForeground, #75beff); }
+        .ac-icon.keyword { color: var(--vscode-symbolIcon-keywordForeground, #c586c0); }
+
+        /* ── Hidden ──────────────────────────────────────── */
+        .hidden { display: none !important; }
+
+        /* ── Copy Toast ──────────────────────────────────── */
+        .copy-toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background-color: var(--vscode-editorWidget-background, #252526);
+            color: var(--vscode-editorWidget-foreground, #ccc);
+            border: 1px solid var(--vscode-widget-border, #454545);
+            border-radius: 4px;
+            padding: 5px 12px;
+            font-size: 12px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s, transform 0.2s;
+            z-index: 100;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .copy-toast.visible {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <!-- Toolbar -->
+    <div class="toolbar">
+        <div class="toolbar-group">
+            <select class="conn-select" id="connSelect" title="Select connection">
+                <option value="">No connection</option>
+            </select>
+        </div>
+
+        <div class="toolbar-separator"></div>
+
+        <div class="toolbar-group">
+            <button class="toolbar-btn primary" id="runBtn" title="Run Query (Ctrl+Enter)">
+                &#9654; Run
+            </button>
+            <button class="toolbar-btn icon-only" id="clearBtn" title="Clear editor">
+                &#128465;
+            </button>
+        </div>
+
+        <div class="toolbar-spacer"></div>
+
+        <div class="toolbar-group">
+            <button class="toolbar-btn secondary" id="exportBtn" title="Export results as CSV" disabled>
+                &#x2913; Export
+            </button>
+        </div>
+    </div>
+
+    <!-- Split: Editor + Results -->
+    <div class="split-container">
+        <!-- SQL Editor -->
+        <div class="editor-pane" id="editorPane">
+            <div class="editor-wrapper">
+                <div class="line-numbers" id="lineNumbers">
+                    <span class="line-num">1</span>
+                </div>
+                <textarea
+                    class="sql-textarea"
+                    id="sqlEditor"
+                    placeholder="Write your SQL query here...&#10;&#10;Press Ctrl+Enter or click Run to execute."
+                    spellcheck="false"
+                    autocomplete="off"
+                    autocapitalize="off"
+                ></textarea>
+            </div>
+        </div>
+
+        <!-- Resize Handle -->
+        <div class="resize-handle" id="resizeHandle"></div>
+
+        <!-- Results -->
+        <div class="results-pane" id="resultsPane">
+            <div class="results-header" id="resultsHeader">
+                <span class="tab active" data-tab="results" id="tabResults">Results</span>
+                <span class="tab" data-tab="history" id="tabHistory">History</span>
+                <div class="results-stats" id="resultsStats">
+                    <span id="statRows"></span>
+                    <span id="statTime"></span>
+                </div>
+            </div>
+
+            <!-- Results Tab -->
+            <div class="results-content" id="resultsContent">
+                <!-- Empty State -->
+                <div class="state-message" id="emptyState">
+                    <div class="state-icon">&#128203;</div>
+                    <div>Run a query to see results here</div>
+                    <div style="font-size:11px;opacity:0.7">Ctrl+Enter to execute</div>
+                </div>
+
+                <!-- Loading State -->
+                <div class="state-message hidden" id="loadingState">
+                    <div class="spinner-results"></div>
+                    <div>Executing query...</div>
+                </div>
+
+                <!-- Error State -->
+                <div class="state-message hidden" id="errorState">
+                    <div class="error-box">
+                        <div class="err-title">Query Error</div>
+                        <div class="err-msg" id="errorMsg"></div>
+                    </div>
+                </div>
+
+                <!-- Result Table -->
+                <table class="result-table hidden" id="resultTable">
+                    <thead id="resultHead"></thead>
+                    <tbody id="resultBody"></tbody>
+                </table>
+            </div>
+
+            <!-- History Tab -->
+            <div class="history-list hidden" id="historyContent">
+                <div class="history-empty" id="historyEmpty">No query history yet</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Autocomplete Popup -->
+<div class="autocomplete-popup" id="acPopup"></div>
+
+<!-- Copy Toast -->
+<div class="copy-toast" id="copyToast">Copied!</div>
+
+<script>
+    const vscode = acquireVsCodeApi();
+
+    // ── DOM ─────────────────────────────────────────────
+    const connSelect    = document.getElementById('connSelect');
+    const runBtn        = document.getElementById('runBtn');
+    const clearBtn      = document.getElementById('clearBtn');
+    const exportBtn     = document.getElementById('exportBtn');
+    const sqlEditor     = document.getElementById('sqlEditor');
+    const lineNumbers   = document.getElementById('lineNumbers');
+    const editorPane    = document.getElementById('editorPane');
+    const resizeHandle  = document.getElementById('resizeHandle');
+    const tabResults    = document.getElementById('tabResults');
+    const tabHistory    = document.getElementById('tabHistory');
+    const resultsStats  = document.getElementById('resultsStats');
+    const statRows      = document.getElementById('statRows');
+    const statTime      = document.getElementById('statTime');
+    const resultsContent= document.getElementById('resultsContent');
+    const historyContent= document.getElementById('historyContent');
+    const emptyState    = document.getElementById('emptyState');
+    const loadingState  = document.getElementById('loadingState');
+    const errorState    = document.getElementById('errorState');
+    const errorMsg      = document.getElementById('errorMsg');
+    const resultTable   = document.getElementById('resultTable');
+    const resultHead    = document.getElementById('resultHead');
+    const resultBody    = document.getElementById('resultBody');
+    const historyEmpty  = document.getElementById('historyEmpty');
+    const copyToast     = document.getElementById('copyToast');
+
+    const acPopup = document.getElementById('acPopup');
+
+    let currentColumns = [];
+    let currentRows = [];
+    let queryHistory = [];
+    let schemaData = { tables: [], columns: {} };
+    let acSelectedIdx = -1;
+    let acItems = [];
+    let acVisible = false;
+
+    const SQL_KEYWORDS = [
+        'SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'NOT', 'IN', 'LIKE', 'BETWEEN',
+        'JOIN', 'INNER', 'LEFT', 'RIGHT', 'OUTER', 'FULL', 'CROSS', 'ON',
+        'INSERT', 'INTO', 'VALUES', 'UPDATE', 'SET', 'DELETE',
+        'CREATE', 'TABLE', 'DROP', 'ALTER', 'ADD', 'COLUMN',
+        'ORDER', 'BY', 'ASC', 'DESC', 'GROUP', 'HAVING',
+        'LIMIT', 'OFFSET', 'DISTINCT', 'AS', 'COUNT', 'SUM', 'AVG', 'MIN', 'MAX',
+        'NULL', 'IS', 'EXISTS', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END',
+        'UNION', 'ALL', 'EXCEPT', 'INTERSECT', 'WITH', 'RECURSIVE',
+        'RETURNING', 'COALESCE', 'CAST', 'TRUE', 'FALSE'
+    ];
+
+    // ── Line Numbers ────────────────────────────────────
+    function updateLineNumbers() {
+        const lines = sqlEditor.value.split('\n').length;
+        let html = '';
+        for (let i = 1; i <= Math.max(lines, 1); i++) {
+            html += '<span class="line-num">' + i + '</span>';
+        }
+        lineNumbers.innerHTML = html;
+    }
+
+    sqlEditor.addEventListener('input', updateLineNumbers);
+    sqlEditor.addEventListener('scroll', function() {
+        lineNumbers.style.transform = 'translateY(-' + sqlEditor.scrollTop + 'px)';
+    });
+
+    // ── Tab Handling ────────────────────────────────────
+    function showTab(tab) {
+        if (tab === 'results') {
+            tabResults.classList.add('active');
+            tabHistory.classList.remove('active');
+            resultsContent.classList.remove('hidden');
+            historyContent.classList.add('hidden');
+            resultsStats.classList.remove('hidden');
+        } else {
+            tabResults.classList.remove('active');
+            tabHistory.classList.add('active');
+            resultsContent.classList.add('hidden');
+            historyContent.classList.remove('hidden');
+            resultsStats.classList.add('hidden');
+            renderHistory();
+        }
+    }
+
+    tabResults.addEventListener('click', function() { showTab('results'); });
+    tabHistory.addEventListener('click', function() { showTab('history'); });
+
+    // ── Autocomplete Logic ────────────────────────────────
+
+    function getCurrentWord() {
+        const pos = sqlEditor.selectionStart;
+        const text = sqlEditor.value.substring(0, pos);
+        const match = text.match(/[\w.]+$/);
+        return match ? match[0] : '';
+    }
+
+    function getCaretCoords() {
+        // Create a mirror div to measure caret position
+        const mirror = document.createElement('div');
+        const style = window.getComputedStyle(sqlEditor);
+        mirror.style.cssText = 'position:fixed;top:-9999px;left:-9999px;white-space:pre-wrap;word-wrap:break-word;overflow:hidden;';
+        mirror.style.fontFamily = style.fontFamily;
+        mirror.style.fontSize = style.fontSize;
+        mirror.style.lineHeight = style.lineHeight;
+        mirror.style.padding = style.padding;
+        mirror.style.width = sqlEditor.clientWidth + 'px';
+
+        const text = sqlEditor.value.substring(0, sqlEditor.selectionStart);
+        mirror.textContent = text;
+        const span = document.createElement('span');
+        span.textContent = '|';
+        mirror.appendChild(span);
+        document.body.appendChild(mirror);
+
+        const rect = sqlEditor.getBoundingClientRect();
+        const spanRect = span.getBoundingClientRect();
+        const mirrorRect = mirror.getBoundingClientRect();
+
+        const x = rect.left + (spanRect.left - mirrorRect.left) - sqlEditor.scrollLeft;
+        const y = rect.top + (spanRect.top - mirrorRect.top) - sqlEditor.scrollTop + 20;
+
+        document.body.removeChild(mirror);
+        return { x: Math.min(x, window.innerWidth - 200), y: Math.min(y, window.innerHeight - 200) };
+    }
+
+    function buildSuggestions(word) {
+        if (!word || word.length < 1) return [];
+        const lower = word.toLowerCase();
+        const results = [];
+
+        // Check if word has a dot (table.column)
+        if (word.includes('.')) {
+            const parts = word.split('.');
+            const tableName = parts[0];
+            const colPrefix = (parts[1] || '').toLowerCase();
+            const cols = schemaData.columns[tableName] || [];
+            cols.forEach(function(c) {
+                if (!colPrefix || c.toLowerCase().startsWith(colPrefix)) {
+                    results.push({ label: c, type: 'column', insert: c });
+                }
+            });
+            return results.slice(0, 15);
+        }
+
+        // Tables
+        schemaData.tables.forEach(function(t) {
+            if (t.toLowerCase().startsWith(lower)) {
+                results.push({ label: t, type: 'table', insert: t });
+            }
+        });
+
+        // Column names from all tables
+        var seen = {};
+        Object.keys(schemaData.columns).forEach(function(t) {
+            (schemaData.columns[t] || []).forEach(function(c) {
+                if (c.toLowerCase().startsWith(lower) && !seen[c]) {
+                    seen[c] = true;
+                    results.push({ label: c, type: 'column', insert: c });
+                }
+            });
+        });
+
+        // SQL keywords
+        if (lower.length >= 2) {
+            SQL_KEYWORDS.forEach(function(kw) {
+                if (kw.toLowerCase().startsWith(lower)) {
+                    results.push({ label: kw, type: 'keyword', insert: kw });
+                }
+            });
+        }
+
+        return results.slice(0, 15);
+    }
+
+    function showAutocomplete() {
+        var word = getCurrentWord();
+        acItems = buildSuggestions(word);
+
+        if (acItems.length === 0) {
+            hideAutocomplete();
+            return;
+        }
+
+        acSelectedIdx = 0;
+        var html = '';
+        acItems.forEach(function(item, i) {
+            var iconClass = 'ac-icon ' + item.type;
+            var icon = item.type === 'table' ? 'T' : item.type === 'column' ? 'C' : 'K';
+            html += '<div class="ac-item' + (i === 0 ? ' selected' : '') + '" data-idx="' + i + '">'
+                  + '<span class="' + iconClass + '">' + icon + '</span>'
+                  + '<span>' + esc(item.label) + '</span></div>';
+        });
+
+        acPopup.innerHTML = html;
+        var coords = getCaretCoords();
+        acPopup.style.left = coords.x + 'px';
+        acPopup.style.top = coords.y + 'px';
+        acPopup.classList.add('visible');
+        acVisible = true;
+    }
+
+    function hideAutocomplete() {
+        acPopup.classList.remove('visible');
+        acVisible = false;
+        acSelectedIdx = -1;
+    }
+
+    function applyAutocomplete(idx) {
+        if (idx < 0 || idx >= acItems.length) return;
+        var item = acItems[idx];
+        var word = getCurrentWord();
+        var pos = sqlEditor.selectionStart;
+
+        // If there's a dot, only replace after the dot
+        var replaceLen = word.length;
+        if (word.includes('.')) {
+            var afterDot = word.split('.').pop() || '';
+            replaceLen = afterDot.length;
+        }
+
+        var before = sqlEditor.value.substring(0, pos - replaceLen);
+        var after = sqlEditor.value.substring(pos);
+        sqlEditor.value = before + item.insert + after;
+        sqlEditor.selectionStart = sqlEditor.selectionEnd = before.length + item.insert.length;
+        updateLineNumbers();
+        hideAutocomplete();
+        sqlEditor.focus();
+    }
+
+    // Show autocomplete on typing
+    sqlEditor.addEventListener('input', function() {
+        var word = getCurrentWord();
+        if (word.length >= 1 && schemaData.tables.length > 0) {
+            showAutocomplete();
+        } else if (word.length >= 2) {
+            showAutocomplete();
+        } else {
+            hideAutocomplete();
+        }
+    });
+
+    // Click on autocomplete item
+    acPopup.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        var item = e.target.closest('.ac-item');
+        if (item) {
+            applyAutocomplete(parseInt(item.dataset.idx, 10));
+        }
+    });
+
+    // ── Tab Support in Textarea ─────────────────────────
+    sqlEditor.addEventListener('keydown', function(e) {
+        // Autocomplete navigation
+        if (acVisible) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                acSelectedIdx = Math.min(acSelectedIdx + 1, acItems.length - 1);
+                updateAcSelection();
+                return;
+            }
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                acSelectedIdx = Math.max(acSelectedIdx - 1, 0);
+                updateAcSelection();
+                return;
+            }
+            if (e.key === 'Enter' || e.key === 'Tab') {
+                if (acSelectedIdx >= 0) {
+                    e.preventDefault();
+                    applyAutocomplete(acSelectedIdx);
+                    return;
+                }
+            }
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                hideAutocomplete();
+                return;
+            }
+        }
+
+        if (e.key === 'Tab' && !acVisible) {
+            e.preventDefault();
+            const start = sqlEditor.selectionStart;
+            const end = sqlEditor.selectionEnd;
+            sqlEditor.value = sqlEditor.value.substring(0, start) + '  ' + sqlEditor.value.substring(end);
+            sqlEditor.selectionStart = sqlEditor.selectionEnd = start + 2;
+            updateLineNumbers();
+        }
+    });
+
+    function updateAcSelection() {
+        var items = acPopup.querySelectorAll('.ac-item');
+        items.forEach(function(el, i) {
+            el.classList.toggle('selected', i === acSelectedIdx);
+        });
+        if (items[acSelectedIdx]) {
+            items[acSelectedIdx].scrollIntoView({ block: 'nearest' });
+        }
+    }
+
+    // ── Resize Handle ───────────────────────────────────
+    let isResizing = false;
+    let startY = 0;
+    let startHeight = 0;
+
+    resizeHandle.addEventListener('mousedown', function(e) {
+        isResizing = true;
+        startY = e.clientY;
+        startHeight = editorPane.offsetHeight;
+        resizeHandle.classList.add('active');
+        document.body.style.cursor = 'ns-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', function(e) {
+        if (!isResizing) return;
+        const delta = e.clientY - startY;
+        const newHeight = Math.max(80, Math.min(window.innerHeight - 150, startHeight + delta));
+        editorPane.style.height = newHeight + 'px';
+    });
+
+    document.addEventListener('mouseup', function() {
+        if (isResizing) {
+            isResizing = false;
+            resizeHandle.classList.remove('active');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        }
+    });
+
+    // ── Run Query ───────────────────────────────────────
+    function runQuery() {
+        const sql = sqlEditor.value.trim();
+        if (!sql) return;
+
+        const connId = connSelect.value;
+        if (!connId) {
+            vscode.postMessage({ type: 'noConnection' });
+            return;
+        }
+
+        // Show loading
+        emptyState.classList.add('hidden');
+        errorState.classList.add('hidden');
+        resultTable.classList.add('hidden');
+        loadingState.classList.remove('hidden');
+        runBtn.disabled = true;
+        exportBtn.disabled = true;
+        statRows.textContent = '';
+        statTime.textContent = '';
+        showTab('results');
+
+        vscode.postMessage({ type: 'runQuery', connId: connId, sql: sql });
+    }
+
+    runBtn.addEventListener('click', runQuery);
+
+    // Ctrl+Enter to run
+    sqlEditor.addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+            e.preventDefault();
+            runQuery();
+        }
+    });
+
+    // ── Clear ───────────────────────────────────────────
+    clearBtn.addEventListener('click', function() {
+        sqlEditor.value = '';
+        updateLineNumbers();
+        sqlEditor.focus();
+    });
+
+    // ── Export ──────────────────────────────────────────
+    exportBtn.addEventListener('click', function() {
+        if (currentColumns.length === 0) return;
+        vscode.postMessage({
+            type: 'export',
+            columns: currentColumns,
+            rows: currentRows
+        });
+    });
+
+    // ── Escape HTML ─────────────────────────────────────
+    function esc(text) {
+        if (text === null || text === undefined) return '';
+        const d = document.createElement('div');
+        d.textContent = String(text);
+        return d.innerHTML;
+    }
+
+    // ── Format Time ─────────────────────────────────────
+    function fmtTime(ms) {
+        if (ms === undefined || ms === null) return '';
+        if (ms < 1000) return ms + ' ms';
+        return (ms / 1000).toFixed(2) + ' s';
+    }
+
+    // ── Render Result ───────────────────────────────────
+    function renderResult(data) {
+        loadingState.classList.add('hidden');
+        emptyState.classList.add('hidden');
+        errorState.classList.add('hidden');
+        runBtn.disabled = false;
+
+        const columns = data.columns || [];
+        const rows = data.rows || [];
+        const rowCount = data.rowCount !== undefined ? data.rowCount : rows.length;
+
+        currentColumns = columns;
+        currentRows = rows;
+
+        statRows.textContent = rowCount.toLocaleString() + ' rows';
+        statTime.textContent = fmtTime(data.executionTimeMs);
+
+        // Add to history
+        addHistory(data.sql, rowCount, data.executionTimeMs, null);
+
+        if (columns.length === 0) {
+            emptyState.classList.remove('hidden');
+            emptyState.querySelector('.state-icon').textContent = '\u2713';
+            emptyState.querySelector('div:nth-child(2)').textContent = 'Query executed successfully. ' + rowCount + ' rows affected.';
+            exportBtn.disabled = true;
+            return;
+        }
+
+        exportBtn.disabled = false;
+
+        // Header
+        let head = '<tr><th class="row-num">#</th>';
+        for (const c of columns) {
+            head += '<th>' + esc(c) + '</th>';
+        }
+        head += '</tr>';
+        resultHead.innerHTML = head;
+
+        // Body
+        let body = '';
+        for (let i = 0; i < rows.length; i++) {
+            body += '<tr><td class="row-num">' + (i + 1) + '</td>';
+            for (const c of columns) {
+                const v = rows[i][c];
+                if (v === null || v === undefined) {
+                    body += '<td class="null-val" data-raw="">NULL</td>';
+                } else if (typeof v === 'object') {
+                    const s = JSON.stringify(v);
+                    body += '<td data-raw="' + esc(s) + '">' + esc(s) + '</td>';
+                } else {
+                    body += '<td data-raw="' + esc(v) + '">' + esc(v) + '</td>';
+                }
+            }
+            body += '</tr>';
+        }
+        resultBody.innerHTML = body;
+        resultTable.classList.remove('hidden');
+    }
+
+    // ── Render Error ────────────────────────────────────
+    function renderError(data) {
+        loadingState.classList.add('hidden');
+        emptyState.classList.add('hidden');
+        resultTable.classList.add('hidden');
+        runBtn.disabled = false;
+        exportBtn.disabled = true;
+
+        errorMsg.textContent = data.error || data.message || 'Unknown error';
+        errorState.classList.remove('hidden');
+
+        if (data.executionTimeMs !== undefined) {
+            statTime.textContent = fmtTime(data.executionTimeMs);
+        }
+        statRows.textContent = 'Error';
+
+        addHistory(data.sql, null, data.executionTimeMs, data.error || data.message);
+    }
+
+    // ── Query History ───────────────────────────────────
+    function addHistory(sql, rowCount, timeMs, error) {
+        if (!sql) return;
+        queryHistory.unshift({
+            sql: sql,
+            rowCount: rowCount,
+            timeMs: timeMs,
+            error: error,
+            timestamp: Date.now()
+        });
+        if (queryHistory.length > 50) queryHistory.pop();
+    }
+
+    function renderHistory() {
+        if (queryHistory.length === 0) {
+            historyEmpty.classList.remove('hidden');
+            // Remove existing items
+            const items = historyContent.querySelectorAll('.history-item');
+            items.forEach(function(el) { el.remove(); });
+            return;
+        }
+
+        historyEmpty.classList.add('hidden');
+
+        // Remove old items
+        const old = historyContent.querySelectorAll('.history-item');
+        old.forEach(function(el) { el.remove(); });
+
+        queryHistory.forEach(function(item, idx) {
+            const el = document.createElement('div');
+            el.className = 'history-item';
+            el.setAttribute('data-idx', idx);
+
+            const preview = item.sql.length > 120 ? item.sql.substring(0, 120) + '...' : item.sql;
+            const time = new Date(item.timestamp).toLocaleTimeString();
+            let metaHtml = '<span>' + time + '</span>';
+            if (item.error) {
+                metaHtml += '<span style="color:var(--vscode-errorForeground)">Error</span>';
+            } else if (item.rowCount !== null) {
+                metaHtml += '<span>' + item.rowCount + ' rows</span>';
+            }
+            if (item.timeMs !== undefined && item.timeMs !== null) {
+                metaHtml += '<span>' + fmtTime(item.timeMs) + '</span>';
+            }
+
+            el.innerHTML = '<div class="h-sql">' + esc(preview) + '</div>'
+                         + '<div class="h-meta">' + metaHtml + '</div>';
+
+            el.addEventListener('click', function() {
+                sqlEditor.value = item.sql;
+                updateLineNumbers();
+                showTab('results');
+                sqlEditor.focus();
+            });
+
+            historyContent.appendChild(el);
+        });
+    }
+
+    // ── Cell Click to Copy ──────────────────────────────
+    let clickedCell = null;
+    let toastTimeout = null;
+
+    function showCopyToast(text) {
+        copyToast.textContent = text;
+        copyToast.classList.add('visible');
+        clearTimeout(toastTimeout);
+        toastTimeout = setTimeout(function() {
+            copyToast.classList.remove('visible');
+        }, 1500);
+    }
+
+    resultBody.addEventListener('click', function(e) {
+        const td = e.target.closest('td:not(.row-num)');
+        if (!td) return;
+        if (clickedCell) clickedCell.classList.remove('cell-clicked');
+        td.classList.add('cell-clicked');
+        clickedCell = td;
+
+        const raw = td.getAttribute('data-raw');
+        if (raw !== null && raw !== '') {
+            navigator.clipboard.writeText(raw).then(function() {
+                showCopyToast('Copied to clipboard');
+            }).catch(function() {});
+        }
+    });
+
+    // ── Message Handler ─────────────────────────────────
+    window.addEventListener('message', function(event) {
+        const msg = event.data;
+        if (!msg || !msg.type) return;
+
+        switch (msg.type) {
+            case 'connections':
+                updateConnections(msg.connections, msg.activeId);
+                break;
+
+            case 'queryResult':
+                renderResult(msg);
+                break;
+
+            case 'queryError':
+                renderError(msg);
+                break;
+
+            case 'error':
+                renderError(msg);
+                break;
+
+            case 'schema':
+                if (msg.schema) {
+                    schemaData = msg.schema;
+                }
+                break;
+        }
+    });
+
+    function updateConnections(connections, activeId) {
+        let html = '<option value="">-- Select Connection --</option>';
+        (connections || []).forEach(function(c) {
+            const selected = c.id === activeId ? ' selected' : '';
+            html += '<option value="' + esc(c.id) + '"' + selected + '>'
+                  + esc(c.name) + ' (' + esc(c.type) + ')</option>';
+        });
+        connSelect.innerHTML = html;
+
+        // Fetch schema for autocomplete
+        var selectedConn = activeId || connSelect.value;
+        if (selectedConn) {
+            vscode.postMessage({ type: 'fetchSchema', connId: selectedConn });
+        }
+    }
+
+    // Fetch schema when user changes connection
+    connSelect.addEventListener('change', function() {
+        if (connSelect.value) {
+            vscode.postMessage({ type: 'fetchSchema', connId: connSelect.value });
+        }
+    });
+
+    // ── Init ────────────────────────────────────────────
+    updateLineNumbers();
+    sqlEditor.focus();
+
+    // Request connections list
+    vscode.postMessage({ type: 'ready' });
+</script>
+</body>
+</html>

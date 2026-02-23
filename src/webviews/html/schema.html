@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+    <title>Schema Diagram</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #1e1e1e;
+            color: #cccccc;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+            font-size: 13px;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            user-select: none;
+        }
+
+        #canvas-viewport {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            position: relative;
+            cursor: grab;
+        }
+
+        #canvas-viewport.grabbing {
+            cursor: grabbing;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 10000px;
+            height: 10000px;
+            transform-origin: 0 0;
+        }
+
+        #arrows-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        #arrows-svg line,
+        #arrows-svg path {
+            pointer-events: none;
+        }
+
+        /* Table Cards */
+        .table-card {
+            position: absolute;
+            background: #252526;
+            border: 1px solid #3c3c3c;
+            border-radius: 6px;
+            min-width: 220px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            z-index: 1;
+            cursor: move;
+            transition: box-shadow 0.15s ease;
+        }
+
+        .table-card:hover {
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+            border-color: #505050;
+        }
+
+        .table-card.dragging {
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+            border-color: #569cd6;
+            z-index: 10;
+        }
+
+        .table-header {
+            background: #2d2d2d;
+            padding: 0 12px;
+            height: 40px;
+            line-height: 40px;
+            font-weight: 600;
+            font-size: 14px;
+            color: #569cd6;
+            border-bottom: 1px solid #3c3c3c;
+            border-radius: 6px 6px 0 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .table-header .schema-badge {
+            font-size: 11px;
+            font-weight: 400;
+            color: #808080;
+            margin-left: 6px;
+        }
+
+        .table-columns {
+            padding: 4px 0;
+        }
+
+        .column-row {
+            display: flex;
+            align-items: center;
+            height: 28px;
+            padding: 0 12px;
+            gap: 8px;
+            transition: background 0.1s ease;
+        }
+
+        .column-row:hover {
+            background: #2a2d2e;
+        }
+
+        .column-row.is-pk {
+            background: rgba(86, 156, 214, 0.06);
+        }
+
+        .column-row.is-fk {
+            background: rgba(206, 145, 52, 0.06);
+        }
+
+        .column-icon {
+            width: 18px;
+            text-align: center;
+            flex-shrink: 0;
+            font-size: 12px;
+            line-height: 1;
+        }
+
+        .column-icon.pk-icon {
+            color: #d4a843;
+        }
+
+        .column-icon.fk-icon {
+            color: #569cd6;
+            font-size: 10px;
+        }
+
+        .column-icon.normal-icon {
+            color: #555555;
+            font-size: 8px;
+        }
+
+        .column-name {
+            flex: 1;
+            color: #d4d4d4;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .column-name.pk-name {
+            font-weight: 600;
+        }
+
+        .column-type {
+            color: #808080;
+            font-size: 11px;
+            flex-shrink: 0;
+            text-transform: lowercase;
+        }
+
+        .column-nullable {
+            color: #6a6a6a;
+            font-size: 10px;
+            flex-shrink: 0;
+        }
+
+        /* Minimap */
+        #minimap {
+            position: fixed;
+            bottom: 16px;
+            right: 16px;
+            width: 200px;
+            height: 150px;
+            background: #1e1e1e;
+            border: 1px solid #3c3c3c;
+            border-radius: 4px;
+            overflow: hidden;
+            z-index: 100;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+        }
+
+        #minimap-canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        #minimap-viewport {
+            position: absolute;
+            border: 1.5px solid #569cd6;
+            background: rgba(86, 156, 214, 0.1);
+            pointer-events: none;
+            border-radius: 1px;
+        }
+
+        /* Zoom controls */
+        #zoom-controls {
+            position: fixed;
+            bottom: 16px;
+            right: 232px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            z-index: 100;
+        }
+
+        .zoom-btn {
+            width: 32px;
+            height: 32px;
+            background: #2d2d2d;
+            border: 1px solid #3c3c3c;
+            border-radius: 4px;
+            color: #cccccc;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s ease;
+        }
+
+        .zoom-btn:hover {
+            background: #3c3c3c;
+        }
+
+        #zoom-level {
+            text-align: center;
+            font-size: 11px;
+            color: #808080;
+            padding: 2px 0;
+        }
+
+        /* Empty state */
+        #empty-state {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #808080;
+        }
+
+        #empty-state .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid #3c3c3c;
+            border-top-color: #569cd6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Error state */
+        #error-state {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #f14c4c;
+            max-width: 400px;
+        }
+
+        #error-state .error-icon {
+            font-size: 32px;
+            margin-bottom: 12px;
+        }
+
+        #error-state .error-message {
+            font-size: 14px;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-viewport">
+        <div id="canvas-container">
+            <svg id="arrows-svg">
+                <defs>
+                    <marker id="arrowhead"
+                            markerWidth="8" markerHeight="6"
+                            refX="8" refY="3"
+                            orient="auto"
+                            markerUnits="strokeWidth">
+                        <path d="M0,0 L8,3 L0,6 Z" fill="#569cd6" fill-opacity="0.8" />
+                    </marker>
+                </defs>
+            </svg>
+        </div>
+    </div>
+
+    <div id="empty-state">
+        <div class="spinner"></div>
+        <div>Loading schema diagram...</div>
+    </div>
+
+    <div id="error-state">
+        <div class="error-icon">!</div>
+        <div class="error-message" id="error-message"></div>
+    </div>
+
+    <div id="minimap">
+        <canvas id="minimap-canvas"></canvas>
+        <div id="minimap-viewport"></div>
+    </div>
+
+    <div id="zoom-controls">
+        <button class="zoom-btn" id="zoom-in" title="Zoom In">+</button>
+        <div id="zoom-level">100%</div>
+        <button class="zoom-btn" id="zoom-out" title="Zoom Out">-</button>
+        <button class="zoom-btn" id="zoom-fit" title="Fit to View" style="font-size:12px; margin-top:4px;">Fit</button>
+    </div>
+
+    <script>
+        const vscode = acquireVsCodeApi();
+
+        // --- Constants ---
+        const ROW_HEIGHT = 28;
+        const HEADER_HEIGHT = 40;
+        const COLUMN_PADDING_TOP = 4;
+        const MIN_ZOOM = 0.2;
+        const MAX_ZOOM = 3.0;
+        const ZOOM_STEP = 0.1;
+        const BEZIER_OFFSET = 80;
+
+        // --- State ---
+        let tables = [];
+        let foreignKeys = [];
+        let tablePositions = {};
+        let tableElements = {};
+        let fkColumnSets = new Set();
+
+        let panX = 0;
+        let panY = 0;
+        let zoom = 1;
+
+        let isPanning = false;
+        let panStartX = 0;
+        let panStartY = 0;
+        let panStartPanX = 0;
+        let panStartPanY = 0;
+
+        let isDragging = false;
+        let dragTarget = null;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let dragOrigX = 0;
+        let dragOrigY = 0;
+
+        // --- DOM refs ---
+        const viewport = document.getElementById('canvas-viewport');
+        const container = document.getElementById('canvas-container');
+        const arrowsSvg = document.getElementById('arrows-svg');
+        const emptyState = document.getElementById('empty-state');
+        const errorState = document.getElementById('error-state');
+        const errorMessage = document.getElementById('error-message');
+        const minimapEl = document.getElementById('minimap');
+        const minimapCanvas = document.getElementById('minimap-canvas');
+        const minimapViewportEl = document.getElementById('minimap-viewport');
+        const zoomLevelEl = document.getElementById('zoom-level');
+
+        // --- Transform ---
+        function applyTransform() {
+            container.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+            zoomLevelEl.textContent = Math.round(zoom * 100) + '%';
+            updateMinimap();
+        }
+
+        // --- Zoom ---
+        function setZoom(newZoom, centerX, centerY) {
+            newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom));
+            if (centerX !== undefined && centerY !== undefined) {
+                const worldX = (centerX - panX) / zoom;
+                const worldY = (centerY - panY) / zoom;
+                panX = centerX - worldX * newZoom;
+                panY = centerY - worldY * newZoom;
+            }
+            zoom = newZoom;
+            applyTransform();
+        }
+
+        viewport.addEventListener('wheel', function(e) {
+            e.preventDefault();
+            const rect = viewport.getBoundingClientRect();
+            const cx = e.clientX - rect.left;
+            const cy = e.clientY - rect.top;
+            const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+            setZoom(zoom + delta, cx, cy);
+        }, { passive: false });
+
+        document.getElementById('zoom-in').addEventListener('click', function() {
+            const rect = viewport.getBoundingClientRect();
+            setZoom(zoom + ZOOM_STEP, rect.width / 2, rect.height / 2);
+        });
+
+        document.getElementById('zoom-out').addEventListener('click', function() {
+            const rect = viewport.getBoundingClientRect();
+            setZoom(zoom - ZOOM_STEP, rect.width / 2, rect.height / 2);
+        });
+
+        document.getElementById('zoom-fit').addEventListener('click', fitToView);
+
+        function fitToView() {
+            if (tables.length === 0) return;
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            for (const t of tables) {
+                const pos = tablePositions[t.name];
+                if (!pos) continue;
+                minX = Math.min(minX, pos.x);
+                minY = Math.min(minY, pos.y);
+                maxX = Math.max(maxX, pos.x + (pos.width || 220));
+                maxY = Math.max(maxY, pos.y + (pos.height || 200));
+            }
+            if (minX === Infinity) return;
+            const padding = 60;
+            minX -= padding; minY -= padding;
+            maxX += padding; maxY += padding;
+            const dw = maxX - minX;
+            const dh = maxY - minY;
+            const vw = viewport.clientWidth;
+            const vh = viewport.clientHeight;
+            const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.min(vw / dw, vh / dh)));
+            zoom = newZoom;
+            panX = (vw - dw * zoom) / 2 - minX * zoom;
+            panY = (vh - dh * zoom) / 2 - minY * zoom;
+            applyTransform();
+        }
+
+        // --- Pan ---
+        viewport.addEventListener('mousedown', function(e) {
+            if (e.target.closest('.table-card') || e.target.closest('#minimap') ||
+                e.target.closest('#zoom-controls')) return;
+            isPanning = true;
+            panStartX = e.clientX;
+            panStartY = e.clientY;
+            panStartPanX = panX;
+            panStartPanY = panY;
+            viewport.classList.add('grabbing');
+            e.preventDefault();
+        });
+
+        window.addEventListener('mousemove', function(e) {
+            if (isPanning) {
+                panX = panStartPanX + (e.clientX - panStartX);
+                panY = panStartPanY + (e.clientY - panStartY);
+                applyTransform();
+            }
+            if (isDragging && dragTarget) {
+                const dx = (e.clientX - dragStartX) / zoom;
+                const dy = (e.clientY - dragStartY) / zoom;
+                const newX = dragOrigX + dx;
+                const newY = dragOrigY + dy;
+                const name = dragTarget.dataset.tableName;
+                tablePositions[name].x = newX;
+                tablePositions[name].y = newY;
+                dragTarget.style.left = newX + 'px';
+                dragTarget.style.top = newY + 'px';
+                updateArrows();
+                updateMinimap();
+            }
+        });
+
+        window.addEventListener('mouseup', function() {
+            if (isPanning) {
+                isPanning = false;
+                viewport.classList.remove('grabbing');
+            }
+            if (isDragging && dragTarget) {
+                dragTarget.classList.remove('dragging');
+                isDragging = false;
+                dragTarget = null;
+            }
+        });
+
+        // --- Table drag ---
+        function onTableMouseDown(e) {
+            const card = e.target.closest('.table-card');
+            if (!card) return;
+            isDragging = true;
+            dragTarget = card;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+            const name = card.dataset.tableName;
+            dragOrigX = tablePositions[name].x;
+            dragOrigY = tablePositions[name].y;
+            card.classList.add('dragging');
+            e.stopPropagation();
+            e.preventDefault();
+        }
+
+        // --- Build table cards ---
+        function buildTableCard(table, position) {
+            const card = document.createElement('div');
+            card.className = 'table-card';
+            card.dataset.tableName = table.name;
+            card.style.left = position.x + 'px';
+            card.style.top = position.y + 'px';
+            if (position.width) {
+                card.style.width = position.width + 'px';
+            }
+
+            const header = document.createElement('div');
+            header.className = 'table-header';
+            header.textContent = table.name;
+            if (table.schema && table.schema !== 'dbo' && table.schema !== 'public') {
+                const badge = document.createElement('span');
+                badge.className = 'schema-badge';
+                badge.textContent = '(' + table.schema + ')';
+                header.appendChild(badge);
+            }
+            card.appendChild(header);
+
+            const columnsDiv = document.createElement('div');
+            columnsDiv.className = 'table-columns';
+
+            table.columns.forEach(function(col) {
+                const row = document.createElement('div');
+                row.className = 'column-row';
+                row.dataset.columnName = col.name;
+
+                const isFk = fkColumnSets.has(table.name + '.' + col.name);
+
+                if (col.isPrimaryKey) row.classList.add('is-pk');
+                if (isFk) row.classList.add('is-fk');
+
+                const icon = document.createElement('span');
+                icon.className = 'column-icon';
+                if (col.isPrimaryKey) {
+                    icon.classList.add('pk-icon');
+                    icon.textContent = '\uD83D\uDD11';
+                } else if (isFk) {
+                    icon.classList.add('fk-icon');
+                    icon.textContent = 'FK';
+                } else {
+                    icon.classList.add('normal-icon');
+                    icon.textContent = '\u00B7';
+                }
+                row.appendChild(icon);
+
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'column-name';
+                if (col.isPrimaryKey) nameSpan.classList.add('pk-name');
+                nameSpan.textContent = col.name;
+                row.appendChild(nameSpan);
+
+                const typeSpan = document.createElement('span');
+                typeSpan.className = 'column-type';
+                typeSpan.textContent = col.type;
+                row.appendChild(typeSpan);
+
+                if (col.nullable) {
+                    const nullSpan = document.createElement('span');
+                    nullSpan.className = 'column-nullable';
+                    nullSpan.textContent = '?';
+                    nullSpan.title = 'nullable';
+                    row.appendChild(nullSpan);
+                }
+
+                columnsDiv.appendChild(row);
+            });
+
+            card.appendChild(columnsDiv);
+            card.addEventListener('mousedown', onTableMouseDown);
+
+            return card;
+        }
+
+        // --- Arrow computation ---
+        function getColumnRowCenter(tableName, columnName, side) {
+            const pos = tablePositions[tableName];
+            if (!pos) return null;
+
+            const table = tables.find(function(t) { return t.name === tableName; });
+            if (!table) return null;
+
+            const colIndex = table.columns.findIndex(function(c) { return c.name === columnName; });
+            if (colIndex < 0) return null;
+
+            const cardWidth = pos.width || 220;
+            const y = pos.y + HEADER_HEIGHT + COLUMN_PADDING_TOP + colIndex * ROW_HEIGHT + ROW_HEIGHT / 2;
+
+            if (side === 'right') {
+                return { x: pos.x + cardWidth, y: y };
+            } else {
+                return { x: pos.x, y: y };
+            }
+        }
+
+        function updateArrows() {
+            // Clear existing paths
+            const existing = arrowsSvg.querySelectorAll('.fk-arrow');
+            existing.forEach(function(el) { el.remove(); });
+
+            foreignKeys.forEach(function(fk) {
+                const fromPos = tablePositions[fk.fromTable];
+                const toPos = tablePositions[fk.toTable];
+                if (!fromPos || !toPos) return;
+
+                const fromCenterX = fromPos.x + (fromPos.width || 220) / 2;
+                const toCenterX = toPos.x + (toPos.width || 220) / 2;
+
+                let startSide, endSide;
+                if (fromCenterX <= toCenterX) {
+                    startSide = 'right';
+                    endSide = 'left';
+                } else {
+                    startSide = 'left';
+                    endSide = 'right';
+                }
+
+                const start = getColumnRowCenter(fk.fromTable, fk.fromColumn, startSide);
+                const end = getColumnRowCenter(fk.toTable, fk.toColumn, endSide);
+                if (!start || !end) return;
+
+                const dx = startSide === 'right' ? BEZIER_OFFSET : -BEZIER_OFFSET;
+                const dxEnd = endSide === 'left' ? -BEZIER_OFFSET : BEZIER_OFFSET;
+
+                const cp1x = start.x + dx;
+                const cp1y = start.y;
+                const cp2x = end.x + dxEnd;
+                const cp2y = end.y;
+
+                const pathD = 'M ' + start.x + ' ' + start.y +
+                              ' C ' + cp1x + ' ' + cp1y +
+                              ', ' + cp2x + ' ' + cp2y +
+                              ', ' + end.x + ' ' + end.y;
+
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('class', 'fk-arrow');
+                path.setAttribute('d', pathD);
+                path.setAttribute('fill', 'none');
+                path.setAttribute('stroke', '#569cd6');
+                path.setAttribute('stroke-opacity', '0.7');
+                path.setAttribute('stroke-width', '1.5');
+                path.setAttribute('marker-end', 'url(#arrowhead)');
+                arrowsSvg.appendChild(path);
+            });
+        }
+
+        // --- Minimap ---
+        function updateMinimap() {
+            if (tables.length === 0) {
+                minimapEl.style.display = 'none';
+                return;
+            }
+            minimapEl.style.display = 'block';
+
+            const canvas = minimapCanvas;
+            const ctx = canvas.getContext('2d');
+            const cw = minimapEl.clientWidth;
+            const ch = minimapEl.clientHeight;
+            canvas.width = cw;
+            canvas.height = ch;
+
+            // Compute diagram bounds
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            for (const t of tables) {
+                const pos = tablePositions[t.name];
+                if (!pos) continue;
+                const w = pos.width || 220;
+                const h = HEADER_HEIGHT + COLUMN_PADDING_TOP * 2 + t.columns.length * ROW_HEIGHT;
+                minX = Math.min(minX, pos.x);
+                minY = Math.min(minY, pos.y);
+                maxX = Math.max(maxX, pos.x + w);
+                maxY = Math.max(maxY, pos.y + h);
+            }
+
+            if (minX === Infinity) return;
+
+            const pad = 40;
+            minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+            const dw = maxX - minX;
+            const dh = maxY - minY;
+            const scaleMap = Math.min(cw / dw, ch / dh);
+
+            const offX = (cw - dw * scaleMap) / 2;
+            const offY = (ch - dh * scaleMap) / 2;
+
+            ctx.clearRect(0, 0, cw, ch);
+            ctx.fillStyle = '#1e1e1e';
+            ctx.fillRect(0, 0, cw, ch);
+
+            // Draw FK lines
+            ctx.strokeStyle = 'rgba(86, 156, 214, 0.4)';
+            ctx.lineWidth = 1;
+            foreignKeys.forEach(function(fk) {
+                const fp = tablePositions[fk.fromTable];
+                const tp = tablePositions[fk.toTable];
+                if (!fp || !tp) return;
+                const fw = fp.width || 220;
+                const tw = tp.width || 220;
+                const x1 = offX + (fp.x + fw / 2 - minX) * scaleMap;
+                const y1 = offY + (fp.y + 20 - minY) * scaleMap;
+                const x2 = offX + (tp.x + tw / 2 - minX) * scaleMap;
+                const y2 = offY + (tp.y + 20 - minY) * scaleMap;
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+            });
+
+            // Draw table rectangles
+            for (const t of tables) {
+                const pos = tablePositions[t.name];
+                if (!pos) continue;
+                const w = pos.width || 220;
+                const h = HEADER_HEIGHT + COLUMN_PADDING_TOP * 2 + t.columns.length * ROW_HEIGHT;
+                const rx = offX + (pos.x - minX) * scaleMap;
+                const ry = offY + (pos.y - minY) * scaleMap;
+                const rw = w * scaleMap;
+                const rh = h * scaleMap;
+
+                ctx.fillStyle = '#333333';
+                ctx.fillRect(rx, ry, rw, rh);
+                ctx.strokeStyle = '#569cd6';
+                ctx.lineWidth = 0.5;
+                ctx.strokeRect(rx, ry, rw, rh);
+            }
+
+            // Draw viewport rectangle
+            const vw = viewport.clientWidth;
+            const vh = viewport.clientHeight;
+            const vpLeft = (-panX / zoom);
+            const vpTop = (-panY / zoom);
+            const vpWidth = vw / zoom;
+            const vpHeight = vh / zoom;
+
+            const vrx = offX + (vpLeft - minX) * scaleMap;
+            const vry = offY + (vpTop - minY) * scaleMap;
+            const vrw = vpWidth * scaleMap;
+            const vrh = vpHeight * scaleMap;
+
+            minimapViewportEl.style.left = Math.max(0, vrx) + 'px';
+            minimapViewportEl.style.top = Math.max(0, vry) + 'px';
+            minimapViewportEl.style.width = Math.min(cw, vrw) + 'px';
+            minimapViewportEl.style.height = Math.min(ch, vrh) + 'px';
+
+            // Store minimap mapping for click navigation
+            minimapEl._mapData = { minX: minX, minY: minY, dw: dw, dh: dh, scaleMap: scaleMap, offX: offX, offY: offY };
+        }
+
+        // --- Minimap click navigation ---
+        minimapEl.addEventListener('mousedown', function(e) {
+            e.stopPropagation();
+            navigateFromMinimap(e);
+        });
+
+        minimapEl.addEventListener('mousemove', function(e) {
+            if (e.buttons === 1) {
+                navigateFromMinimap(e);
+            }
+        });
+
+        function navigateFromMinimap(e) {
+            const data = minimapEl._mapData;
+            if (!data) return;
+
+            const rect = minimapEl.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+
+            const worldX = data.minX + (mx - data.offX) / data.scaleMap;
+            const worldY = data.minY + (my - data.offY) / data.scaleMap;
+
+            const vw = viewport.clientWidth;
+            const vh = viewport.clientHeight;
+
+            panX = -(worldX * zoom - vw / 2);
+            panY = -(worldY * zoom - vh / 2);
+            applyTransform();
+        }
+
+        // --- Render schema ---
+        function renderSchema(data) {
+            tables = data.tables || [];
+            foreignKeys = data.foreignKeys || [];
+            const positions = data.positions || [];
+
+            // Build FK column lookup
+            fkColumnSets.clear();
+            foreignKeys.forEach(function(fk) {
+                fkColumnSets.add(fk.fromTable + '.' + fk.fromColumn);
+            });
+
+            // Build positions map
+            tablePositions = {};
+            positions.forEach(function(p) {
+                tablePositions[p.name] = { x: p.x, y: p.y, width: p.width || 220, height: p.height || 200 };
+            });
+
+            // Clear container (keep SVG)
+            const existingCards = container.querySelectorAll('.table-card');
+            existingCards.forEach(function(c) { c.remove(); });
+
+            tableElements = {};
+
+            // Create table cards
+            tables.forEach(function(table) {
+                let pos = tablePositions[table.name];
+                if (!pos) {
+                    pos = { x: 100, y: 100, width: 220, height: 200 };
+                    tablePositions[table.name] = pos;
+                }
+                const card = buildTableCard(table, pos);
+                container.appendChild(card);
+                tableElements[table.name] = card;
+
+                // Update actual dimensions after render
+                const computedHeight = HEADER_HEIGHT + COLUMN_PADDING_TOP * 2 + table.columns.length * ROW_HEIGHT;
+                pos.height = computedHeight;
+            });
+
+            // Hide loading, show diagram
+            emptyState.style.display = 'none';
+            errorState.style.display = 'none';
+
+            // Draw arrows
+            updateArrows();
+
+            // Fit to view initially
+            fitToView();
+        }
+
+        // --- Show error ---
+        function showError(msg) {
+            emptyState.style.display = 'none';
+            errorState.style.display = 'block';
+            errorMessage.textContent = msg;
+            minimapEl.style.display = 'none';
+        }
+
+        // --- Message handler ---
+        window.addEventListener('message', function(e) {
+            const msg = e.data;
+            if (!msg || !msg.type) return;
+
+            switch (msg.type) {
+                case 'schema':
+                    renderSchema(msg);
+                    break;
+                case 'error':
+                    showError(msg.message || 'An unknown error occurred.');
+                    break;
+            }
+        });
+
+        // --- Window resize ---
+        window.addEventListener('resize', function() {
+            updateMinimap();
+        });
+
+        // --- Keyboard shortcuts ---
+        window.addEventListener('keydown', function(e) {
+            if (e.key === '0' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                const rect = viewport.getBoundingClientRect();
+                setZoom(1, rect.width / 2, rect.height / 2);
+            }
+            if (e.key === 'f' || e.key === 'F') {
+                if (!e.ctrlKey && !e.metaKey) {
+                    fitToView();
+                }
+            }
+        });
+
+        // --- Signal ready ---
+        applyTransform();
+    </script>
+</body>
+</html>

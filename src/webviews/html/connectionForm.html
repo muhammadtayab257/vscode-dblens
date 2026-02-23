@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta
+        http-equiv="Content-Security-Policy"
+        content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';"
+    />
+    <title>Database Connection</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--vscode-editor-background);
+            color: var(--vscode-editor-foreground);
+            font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+            font-size: var(--vscode-font-size, 13px);
+            line-height: 1.5;
+            display: flex;
+            justify-content: center;
+            padding: 24px 16px;
+            min-height: 100vh;
+        }
+
+        .form-container {
+            width: 100%;
+            max-width: 520px;
+        }
+
+        /* ── Header ─────────────────────────────────────── */
+
+        .form-header {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+
+        .form-header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--vscode-editor-foreground);
+            margin-bottom: 4px;
+        }
+
+        .form-header p {
+            font-size: 12px;
+            color: var(--vscode-descriptionForeground);
+        }
+
+        /* ── DB Type Selector ───────────────────────────── */
+
+        .db-type-selector {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+
+        .db-type-btn {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            padding: 14px 8px;
+            background-color: var(--vscode-input-background);
+            border: 2px solid var(--vscode-input-border, transparent);
+            border-radius: 6px;
+            color: var(--vscode-input-foreground);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .db-type-btn:hover {
+            border-color: var(--vscode-focusBorder);
+            background-color: var(--vscode-list-hoverBackground);
+        }
+
+        .db-type-btn.active {
+            border-color: var(--vscode-focusBorder);
+            background-color: var(--vscode-list-activeSelectionBackground);
+            color: var(--vscode-list-activeSelectionForeground);
+        }
+
+        .db-type-icon {
+            font-size: 24px;
+            line-height: 1;
+        }
+
+        /* ── Form Groups ────────────────────────────────── */
+
+        .form-section {
+            background-color: var(--vscode-input-background);
+            border: 1px solid var(--vscode-input-border, var(--vscode-widget-border, transparent));
+            border-radius: 6px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .form-section-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--vscode-descriptionForeground);
+            margin-bottom: 12px;
+        }
+
+        .form-group {
+            margin-bottom: 14px;
+        }
+
+        .form-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--vscode-editor-foreground);
+            margin-bottom: 4px;
+        }
+
+        .form-group label .required {
+            color: var(--vscode-errorForeground, #f14c4c);
+            margin-left: 2px;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .form-row .form-group {
+            flex: 1;
+        }
+
+        .form-row .form-group.small {
+            flex: 0 0 100px;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="number"] {
+            width: 100%;
+            padding: 7px 10px;
+            background-color: var(--vscode-input-background);
+            border: 1px solid var(--vscode-input-border, var(--vscode-widget-border, #3c3c3c));
+            border-radius: 4px;
+            color: var(--vscode-input-foreground);
+            font-family: inherit;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+
+        input:focus {
+            border-color: var(--vscode-focusBorder);
+        }
+
+        input::placeholder {
+            color: var(--vscode-input-placeholderForeground);
+        }
+
+        /* ── SQLite file picker ─────────────────────────── */
+
+        .file-picker {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .file-picker input {
+            flex: 1;
+        }
+
+        .file-picker-btn {
+            padding: 7px 14px;
+            background-color: var(--vscode-button-secondaryBackground, #3c3c3c);
+            color: var(--vscode-button-secondaryForeground, #cccccc);
+            border: none;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 12px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background-color 0.15s;
+        }
+
+        .file-picker-btn:hover {
+            background-color: var(--vscode-button-secondaryHoverBackground, #505050);
+        }
+
+        /* ── Buttons ────────────────────────────────────── */
+
+        .form-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 9px 16px;
+            border: none;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.15s, opacity 0.15s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background-color: var(--vscode-button-hoverBackground);
+        }
+
+        .btn-secondary {
+            background-color: var(--vscode-button-secondaryBackground, #3c3c3c);
+            color: var(--vscode-button-secondaryForeground, #cccccc);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background-color: var(--vscode-button-secondaryHoverBackground, #505050);
+        }
+
+        .btn-test {
+            background-color: transparent;
+            color: var(--vscode-textLink-foreground, #3794ff);
+            border: 1px solid var(--vscode-textLink-foreground, #3794ff);
+        }
+
+        .btn-test:hover:not(:disabled) {
+            background-color: var(--vscode-textLink-foreground, #3794ff);
+            color: var(--vscode-editor-background);
+        }
+
+        /* ── Status Messages ────────────────────────────── */
+
+        .status-message {
+            display: none;
+            padding: 10px 14px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-top: 12px;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-message.visible {
+            display: flex;
+        }
+
+        .status-message.success {
+            background-color: var(--vscode-inputValidation-infoBackground, #063b49);
+            border: 1px solid var(--vscode-inputValidation-infoBorder, #007acc);
+            color: var(--vscode-inputValidation-infoForeground, #ccc);
+        }
+
+        .status-message.error {
+            background-color: var(--vscode-inputValidation-errorBackground, #5a1d1d);
+            border: 1px solid var(--vscode-inputValidation-errorBorder, #be1100);
+            color: var(--vscode-inputValidation-errorForeground, #ccc);
+        }
+
+        .status-message.loading {
+            background-color: var(--vscode-input-background);
+            border: 1px solid var(--vscode-input-border, #3c3c3c);
+            color: var(--vscode-descriptionForeground);
+        }
+
+        .spinner-sm {
+            width: 14px;
+            height: 14px;
+            border: 2px solid var(--vscode-input-border, #3c3c3c);
+            border-top-color: var(--vscode-focusBorder);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            flex-shrink: 0;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ── Hidden sections ────────────────────────────── */
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* ── Validation ─────────────────────────────────── */
+
+        .field-error {
+            font-size: 11px;
+            color: var(--vscode-errorForeground, #f14c4c);
+            margin-top: 3px;
+            display: none;
+        }
+
+        .field-error.visible {
+            display: block;
+        }
+
+        input.invalid {
+            border-color: var(--vscode-inputValidation-errorBorder, #be1100) !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="form-container">
+        <div class="form-header">
+            <h1 id="formTitle">New Connection</h1>
+            <p id="formSubtitle">Connect to your database</p>
+        </div>
+
+        <!-- DB Type Selector -->
+        <div class="db-type-selector" id="dbTypeSelector">
+            <button class="db-type-btn active" data-type="postgresql">
+                <span class="db-type-icon">&#128024;</span>
+                PostgreSQL
+            </button>
+            <button class="db-type-btn" data-type="mysql">
+                <span class="db-type-icon">&#128172;</span>
+                MySQL
+            </button>
+            <button class="db-type-btn" data-type="sqlite">
+                <span class="db-type-icon">&#128196;</span>
+                SQLite
+            </button>
+        </div>
+
+        <!-- Connection String -->
+        <div class="form-section" id="connStringSection">
+            <div class="form-section-title">Quick Connect</div>
+            <div class="form-group">
+                <label for="connString">Connection String</label>
+                <input type="text" id="connString" placeholder="postgresql://user:pass@localhost:5432/mydb" autocomplete="off" spellcheck="false" style="font-family:var(--vscode-editor-font-family,monospace);font-size:12px;">
+                <div style="font-size:11px;color:var(--vscode-descriptionForeground);margin-top:3px;">Paste a URI to auto-fill all fields below</div>
+            </div>
+        </div>
+
+        <!-- Connection Name -->
+        <div class="form-section">
+            <div class="form-section-title">General</div>
+            <div class="form-group">
+                <label for="connName">Connection Name <span class="required">*</span></label>
+                <input type="text" id="connName" placeholder="e.g. Production DB" autocomplete="off" spellcheck="false">
+                <div class="field-error" id="connNameError">Connection name is required</div>
+            </div>
+        </div>
+
+        <!-- Server fields (PostgreSQL / MySQL) -->
+        <div class="form-section" id="serverSection">
+            <div class="form-section-title">Server</div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="host">Host</label>
+                    <input type="text" id="host" value="localhost" placeholder="localhost" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="form-group small">
+                    <label for="port">Port</label>
+                    <input type="number" id="port" value="5432" placeholder="5432">
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="database">Database <span class="required">*</span></label>
+                <input type="text" id="database" placeholder="mydb" autocomplete="off" spellcheck="false">
+                <div class="field-error" id="databaseError">Database name is required</div>
+            </div>
+        </div>
+
+        <!-- Authentication (PostgreSQL / MySQL) -->
+        <div class="form-section" id="authSection">
+            <div class="form-section-title">Authentication</div>
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" placeholder="postgres" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" placeholder="Enter password">
+            </div>
+        </div>
+
+        <!-- SQLite file section -->
+        <div class="form-section hidden" id="sqliteSection">
+            <div class="form-section-title">Database File</div>
+            <div class="form-group">
+                <label for="filePath">File Path <span class="required">*</span></label>
+                <div class="file-picker">
+                    <input type="text" id="filePath" placeholder="Select database file..." readonly>
+                    <button class="file-picker-btn" id="browseBtn">Browse...</button>
+                </div>
+                <div class="field-error" id="filePathError">Please select a database file</div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="form-actions">
+            <button class="btn btn-test" id="testBtn">Test Connection</button>
+            <button class="btn btn-primary" id="saveBtn">Save & Connect</button>
+        </div>
+
+        <!-- Status Message -->
+        <div class="status-message" id="statusMessage">
+            <span id="statusIcon"></span>
+            <span id="statusText"></span>
+        </div>
+    </div>
+
+    <script>
+        const vscode = acquireVsCodeApi();
+
+        // ── DOM References ─────────────────────────────────
+        const formTitle = document.getElementById('formTitle');
+        const formSubtitle = document.getElementById('formSubtitle');
+        const dbTypeSelector = document.getElementById('dbTypeSelector');
+        const dbTypeBtns = document.querySelectorAll('.db-type-btn');
+        const connNameInput = document.getElementById('connName');
+        const connNameError = document.getElementById('connNameError');
+        const serverSection = document.getElementById('serverSection');
+        const authSection = document.getElementById('authSection');
+        const sqliteSection = document.getElementById('sqliteSection');
+        const hostInput = document.getElementById('host');
+        const portInput = document.getElementById('port');
+        const databaseInput = document.getElementById('database');
+        const databaseError = document.getElementById('databaseError');
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+        const filePathInput = document.getElementById('filePath');
+        const filePathError = document.getElementById('filePathError');
+        const browseBtn = document.getElementById('browseBtn');
+        const testBtn = document.getElementById('testBtn');
+        const saveBtn = document.getElementById('saveBtn');
+        const statusMessage = document.getElementById('statusMessage');
+        const statusIcon = document.getElementById('statusIcon');
+        const statusText = document.getElementById('statusText');
+
+        const connStringInput = document.getElementById('connString');
+        const connStringSection = document.getElementById('connStringSection');
+
+        // ── State ──────────────────────────────────────────
+        let selectedType = 'postgresql';
+        let editMode = false;
+        let editId = null;
+
+        // ── Connection String Parser ────────────────────────
+        connStringInput.addEventListener('input', function() {
+            const raw = connStringInput.value.trim();
+            if (!raw) return;
+            parseConnectionString(raw);
+        });
+
+        function parseConnectionString(str) {
+            // Formats:
+            // postgresql://user:pass@host:port/db
+            // mysql://user:pass@host:port/db
+            // postgres://user:pass@host:port/db
+            // host:port/db  (no scheme)
+            try {
+                let type = null;
+                let cleaned = str;
+
+                // Detect scheme
+                if (/^postgres(ql)?:\/\//i.test(str)) {
+                    type = 'postgresql';
+                    cleaned = str.replace(/^postgres(ql)?:\/\//i, 'http://');
+                } else if (/^mysql:\/\//i.test(str)) {
+                    type = 'mysql';
+                    cleaned = str.replace(/^mysql:\/\//i, 'http://');
+                }
+
+                if (!type) return;
+
+                // Select the correct DB type button
+                selectedType = type;
+                dbTypeBtns.forEach(function(b) {
+                    b.classList.toggle('active', b.dataset.type === type);
+                });
+                updateFormVisibility();
+
+                // Parse using URL API
+                var url = new URL(cleaned);
+
+                if (url.hostname) hostInput.value = url.hostname;
+                if (url.port) portInput.value = url.port;
+                else portInput.value = type === 'postgresql' ? '5432' : '3306';
+
+                var dbName = url.pathname.replace(/^\//, '');
+                if (dbName) databaseInput.value = dbName;
+
+                if (url.username) usernameInput.value = decodeURIComponent(url.username);
+                if (url.password) passwordInput.value = decodeURIComponent(url.password);
+
+                // Auto-fill connection name
+                if (!connNameInput.value.trim()) {
+                    connNameInput.value = dbName ? dbName + ' @ ' + url.hostname : url.hostname;
+                }
+
+                clearValidation();
+                hideStatus();
+            } catch (e) {
+                // Ignore parse errors - user may still be typing
+            }
+        }
+
+        // ── DB Type Selection ──────────────────────────────
+        dbTypeBtns.forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                dbTypeBtns.forEach(function(b) { b.classList.remove('active'); });
+                btn.classList.add('active');
+                selectedType = btn.dataset.type;
+                updateFormVisibility();
+                hideStatus();
+                clearValidation();
+            });
+        });
+
+        function updateFormVisibility() {
+            if (selectedType === 'sqlite') {
+                serverSection.classList.add('hidden');
+                authSection.classList.add('hidden');
+                sqliteSection.classList.remove('hidden');
+            } else {
+                serverSection.classList.remove('hidden');
+                authSection.classList.remove('hidden');
+                sqliteSection.classList.add('hidden');
+
+                // Update port default
+                const defaultPort = selectedType === 'postgresql' ? '5432' : '3306';
+                if (portInput.value === '5432' || portInput.value === '3306') {
+                    portInput.value = defaultPort;
+                }
+                portInput.placeholder = defaultPort;
+                usernameInput.placeholder = selectedType === 'postgresql' ? 'postgres' : 'root';
+            }
+        }
+
+        // ── Browse Button ──────────────────────────────────
+        browseBtn.addEventListener('click', function() {
+            vscode.postMessage({ type: 'browse' });
+        });
+
+        // ── Validation ─────────────────────────────────────
+        function clearValidation() {
+            connNameInput.classList.remove('invalid');
+            connNameError.classList.remove('visible');
+            databaseInput.classList.remove('invalid');
+            databaseError.classList.remove('visible');
+            filePathInput.classList.remove('invalid');
+            filePathError.classList.remove('visible');
+        }
+
+        function validate() {
+            clearValidation();
+            let valid = true;
+
+            if (!connNameInput.value.trim()) {
+                connNameInput.classList.add('invalid');
+                connNameError.classList.add('visible');
+                valid = false;
+            }
+
+            if (selectedType !== 'sqlite') {
+                if (!databaseInput.value.trim()) {
+                    databaseInput.classList.add('invalid');
+                    databaseError.classList.add('visible');
+                    valid = false;
+                }
+            } else {
+                if (!filePathInput.value.trim()) {
+                    filePathInput.classList.add('invalid');
+                    filePathError.classList.add('visible');
+                    valid = false;
+                }
+            }
+
+            return valid;
+        }
+
+        // ── Get Form Data ──────────────────────────────────
+        function getFormData() {
+            const data = {
+                type: selectedType,
+                name: connNameInput.value.trim(),
+            };
+
+            if (selectedType === 'sqlite') {
+                data.filePath = filePathInput.value.trim();
+                data.database = filePathInput.value.trim();
+            } else {
+                data.host = hostInput.value.trim() || 'localhost';
+                data.port = parseInt(portInput.value, 10) || (selectedType === 'postgresql' ? 5432 : 3306);
+                data.database = databaseInput.value.trim();
+                data.username = usernameInput.value.trim() || undefined;
+                data.password = passwordInput.value || undefined;
+            }
+
+            if (editMode && editId) {
+                data.id = editId;
+            }
+
+            return data;
+        }
+
+        // ── Test Connection ────────────────────────────────
+        testBtn.addEventListener('click', function() {
+            if (!validate()) return;
+            showStatus('loading', 'Testing connection...');
+            testBtn.disabled = true;
+            saveBtn.disabled = true;
+            vscode.postMessage({ type: 'test', data: getFormData() });
+        });
+
+        // ── Save Connection ────────────────────────────────
+        saveBtn.addEventListener('click', function() {
+            if (!validate()) return;
+            showStatus('loading', 'Saving connection...');
+            testBtn.disabled = true;
+            saveBtn.disabled = true;
+            vscode.postMessage({ type: 'save', data: getFormData() });
+        });
+
+        // ── Status Display ─────────────────────────────────
+        function showStatus(type, message) {
+            statusMessage.className = 'status-message visible ' + type;
+            if (type === 'loading') {
+                statusIcon.innerHTML = '<div class="spinner-sm"></div>';
+            } else if (type === 'success') {
+                statusIcon.textContent = '\u2713';
+            } else if (type === 'error') {
+                statusIcon.textContent = '\u2717';
+            }
+            statusText.textContent = message;
+        }
+
+        function hideStatus() {
+            statusMessage.className = 'status-message';
+        }
+
+        // ── Message Handler ────────────────────────────────
+        window.addEventListener('message', function(event) {
+            const msg = event.data;
+            if (!msg || !msg.type) return;
+
+            switch (msg.type) {
+                case 'testResult':
+                    testBtn.disabled = false;
+                    saveBtn.disabled = false;
+                    if (msg.success) {
+                        showStatus('success', msg.message || 'Connection successful!');
+                    } else {
+                        showStatus('error', msg.message || 'Connection failed.');
+                    }
+                    break;
+
+                case 'saveResult':
+                    testBtn.disabled = false;
+                    saveBtn.disabled = false;
+                    if (msg.success) {
+                        showStatus('success', msg.message || 'Connection saved!');
+                    } else {
+                        showStatus('error', msg.message || 'Failed to save.');
+                    }
+                    break;
+
+                case 'filePicked':
+                    if (msg.path) {
+                        filePathInput.value = msg.path;
+                        filePathInput.classList.remove('invalid');
+                        filePathError.classList.remove('visible');
+                    }
+                    break;
+
+                case 'populate':
+                    // Pre-fill form for editing
+                    editMode = true;
+                    editId = msg.data.id;
+                    formTitle.textContent = 'Edit Connection';
+                    formSubtitle.textContent = 'Update your database connection';
+
+                    // Set type
+                    selectedType = msg.data.type || 'postgresql';
+                    dbTypeBtns.forEach(function(btn) {
+                        btn.classList.toggle('active', btn.dataset.type === selectedType);
+                    });
+                    // Hide type selector in edit mode
+                    dbTypeSelector.style.pointerEvents = 'none';
+                    dbTypeSelector.style.opacity = '0.6';
+
+                    updateFormVisibility();
+
+                    connNameInput.value = msg.data.name || '';
+
+                    if (selectedType === 'sqlite') {
+                        filePathInput.value = msg.data.filePath || msg.data.database || '';
+                    } else {
+                        hostInput.value = msg.data.host || 'localhost';
+                        portInput.value = msg.data.port || (selectedType === 'postgresql' ? 5432 : 3306);
+                        databaseInput.value = msg.data.database || '';
+                        usernameInput.value = msg.data.username || '';
+                    }
+
+                    saveBtn.textContent = 'Save Changes';
+                    break;
+            }
+        });
+
+        // ── Keyboard: Enter to Save ────────────────────────
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                if (document.activeElement && document.activeElement.tagName === 'INPUT') {
+                    e.preventDefault();
+                    if (!validate()) return;
+                    showStatus('loading', 'Saving connection...');
+                    testBtn.disabled = true;
+                    saveBtn.disabled = true;
+                    vscode.postMessage({ type: 'save', data: getFormData() });
+                }
+            }
+        });
+    </script>
+</body>
+</html>

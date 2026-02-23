@@ -1,0 +1,226 @@
+{
+  "name": "dblens",
+  "displayName": "DBLens",
+  "description": "Connect to PostgreSQL, MySQL, and SQLite databases directly inside VS Code. Browse tables, run queries, and visualize schema as ER diagrams.",
+  "version": "0.1.0",
+  "publisher": "dblens",
+  "license": "MIT",
+  "icon": "resources/icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "database",
+    "sql",
+    "postgresql",
+    "mysql",
+    "sqlite",
+    "query",
+    "schema",
+    "ER diagram",
+    "table viewer",
+    "database explorer"
+  ],
+  "galleryBanner": {
+    "color": "#0e639c",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/muhammadtayab257/vscode-dblens.git"
+  },
+  "homepage": "https://github.com/muhammadtayab257/vscode-dblens#readme",
+  "bugs": {
+    "url": "https://github.com/muhammadtayab257/vscode-dblens/issues"
+  },
+  "activationEvents": [
+    "onView:dblens-connections"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "dblens-sidebar",
+          "title": "DBLens",
+          "icon": "resources/database.svg"
+        }
+      ]
+    },
+    "views": {
+      "dblens-sidebar": [
+        {
+          "id": "dblens-connections",
+          "name": "Connections",
+          "icon": "resources/database.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "dblens.addConnection",
+        "title": "Add Connection",
+        "category": "DBLens",
+        "icon": "$(add)"
+      },
+      {
+        "command": "dblens.editConnection",
+        "title": "Edit Connection",
+        "category": "DBLens",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "dblens.removeConnection",
+        "title": "Remove Connection",
+        "category": "DBLens",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "dblens.refreshConnections",
+        "title": "Refresh",
+        "category": "DBLens",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "dblens.connectDatabase",
+        "title": "Connect",
+        "category": "DBLens",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "dblens.disconnectDatabase",
+        "title": "Disconnect",
+        "category": "DBLens",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "dblens.runQuery",
+        "title": "Run Query",
+        "category": "DBLens",
+        "icon": "$(play)"
+      },
+      {
+        "command": "dblens.viewTable",
+        "title": "View Table Data",
+        "category": "DBLens",
+        "icon": "$(table)"
+      },
+      {
+        "command": "dblens.visualizeSchema",
+        "title": "Visualize Schema",
+        "category": "DBLens",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "dblens.exportCSV",
+        "title": "Export as CSV",
+        "category": "DBLens",
+        "icon": "$(export)"
+      },
+      {
+        "command": "dblens.copyTableName",
+        "title": "Copy Table Name",
+        "category": "DBLens"
+      },
+      {
+        "command": "dblens.openQueryEditor",
+        "title": "Open Query Editor",
+        "category": "DBLens",
+        "icon": "$(edit)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "dblens.addConnection",
+          "when": "view == dblens-connections",
+          "group": "navigation"
+        },
+        {
+          "command": "dblens.openQueryEditor",
+          "when": "view == dblens-connections",
+          "group": "navigation"
+        },
+        {
+          "command": "dblens.refreshConnections",
+          "when": "view == dblens-connections",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "dblens.connectDatabase",
+          "when": "view == dblens-connections && viewItem == connection-disconnected",
+          "group": "inline"
+        },
+        {
+          "command": "dblens.disconnectDatabase",
+          "when": "view == dblens-connections && viewItem == connection-connected",
+          "group": "inline"
+        },
+        {
+          "command": "dblens.editConnection",
+          "when": "view == dblens-connections && viewItem =~ /^connection/",
+          "group": "1_connection@1"
+        },
+        {
+          "command": "dblens.removeConnection",
+          "when": "view == dblens-connections && viewItem =~ /^connection/",
+          "group": "1_connection@2"
+        },
+        {
+          "command": "dblens.visualizeSchema",
+          "when": "view == dblens-connections && viewItem == connection-connected",
+          "group": "2_schema@1"
+        },
+        {
+          "command": "dblens.viewTable",
+          "when": "view == dblens-connections && viewItem == table",
+          "group": "1_table@1"
+        },
+        {
+          "command": "dblens.copyTableName",
+          "when": "view == dblens-connections && viewItem == table",
+          "group": "1_table@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "dblens.runQuery",
+          "when": "editorLangId == sql",
+          "group": "dblens@1"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "dblens.runQuery",
+        "key": "ctrl+enter",
+        "when": "editorLangId == sql"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/pg": "^8.16.0",
+    "@types/sql.js": "^1.4.9",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "mysql2": "^3.7.0",
+    "pg": "^8.11.3",
+    "sql.js": "^1.9.0"
+  }
+}

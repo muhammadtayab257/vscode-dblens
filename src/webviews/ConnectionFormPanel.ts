@@ -39,7 +39,7 @@ export class ConnectionFormPanel {
       vscode.ViewColumn.One,
       {
         enableScripts: true,
-        retainContextWhenHidden: false,
+        retainContextWhenHidden: true,
         localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'src', 'webviews', 'html')],
       }
     );
@@ -66,7 +66,7 @@ export class ConnectionFormPanel {
       vscode.ViewColumn.One,
       {
         enableScripts: true,
-        retainContextWhenHidden: false,
+        retainContextWhenHidden: true,
         localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'src', 'webviews', 'html')],
       }
     );

@@ -1,22 +1,18 @@
 import * as vscode from 'vscode';
 import { ConnectionManager } from './connections/ConnectionManager';
 import { ConnectionProvider, ConnectionTreeItem } from './providers/ConnectionProvider';
-import { SchemaProvider } from './providers/SchemaProvider';
 import { TableViewPanel } from './webviews/TableViewPanel';
 import { QueryResultPanel } from './webviews/QueryResultPanel';
-import { SchemaPanel } from './webviews/SchemaPanel';
 import { ConnectionFormPanel } from './webviews/ConnectionFormPanel';
 import { QueryEditorPanel } from './webviews/QueryEditorPanel';
 
 let connectionManager: ConnectionManager;
 let connectionProvider: ConnectionProvider;
-let schemaProvider: SchemaProvider;
 let activeConnectionId: string | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
   connectionManager = new ConnectionManager(context);
   connectionProvider = new ConnectionProvider(connectionManager);
-  schemaProvider = new SchemaProvider(connectionManager);
 
   // Register TreeView
   const treeView = vscode.window.createTreeView('dblens-connections', {
@@ -35,7 +31,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('dblens.disconnectDatabase', (item: ConnectionTreeItem) => disconnectDatabase(item)),
     vscode.commands.registerCommand('dblens.runQuery', () => runQuery(context)),
     vscode.commands.registerCommand('dblens.viewTable', (item: ConnectionTreeItem) => viewTable(context, item)),
-    vscode.commands.registerCommand('dblens.visualizeSchema', (item: ConnectionTreeItem) => visualizeSchema(context, item)),
+
     vscode.commands.registerCommand('dblens.exportCSV', () => exportCSV(context)),
     vscode.commands.registerCommand('dblens.copyTableName', (item: ConnectionTreeItem) => copyTableName(item)),
     vscode.commands.registerCommand('dblens.openQueryEditor', () => openQueryEditor(context)),
@@ -173,25 +169,6 @@ async function viewTable(context: vscode.ExtensionContext, item: ConnectionTreeI
   }
 
   TableViewPanel.show(connectionManager, item.connectionId, item.tableName, context.extensionUri);
-}
-
-// ─── Visualize Schema ─────────────────────────────────────────────
-
-async function visualizeSchema(context: vscode.ExtensionContext, item: ConnectionTreeItem): Promise<void> {
-  if (!connectionManager.isConnected(item.connectionId)) {
-    try {
-      await connectionManager.connect(item.connectionId);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      vscode.window.showErrorMessage(`Cannot connect: ${message}`);
-      return;
-    }
-  }
-
-  const conn = connectionManager.getConnection(item.connectionId);
-  const name = conn?.name || String(item.label);
-
-  SchemaPanel.show(schemaProvider, item.connectionId, name, context.extensionUri);
 }
 
 // ─── Export CSV ───────────────────────────────────────────────────

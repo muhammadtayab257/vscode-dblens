@@ -9,3 +9,7 @@ tsconfig.json
 !out/**
 **/*.map
 .eslintrc*
+TODO.md
+**/*.docx
+node_modules/@types/**
+node_modules/typescript/**

@@ -1,6 +1,6 @@
 # DBLens — Database Explorer for VS Code
 
-Browse tables, run queries, and visualize schema directly inside Visual Studio Code. Supports **PostgreSQL**, **MySQL**, and **SQLite**.
+Browse tables and run queries directly inside Visual Studio Code. Supports **PostgreSQL**, **MySQL**, and **SQLite**.
 
 ## Features
 
@@ -33,11 +33,6 @@ Browse tables, run queries, and visualize schema directly inside Visual Studio C
 - Query history tab to re-run previous queries
 - Export query results to CSV
 
-### Schema Visualization
-- Interactive ER diagram of your database schema
-- Shows tables, columns, primary keys, and foreign key relationships
-- Drag-and-drop layout with zoom controls
-
 ### Quick Query Runner
 - Run SQL from any `.sql` file — select text or run the whole file
 - `Ctrl+Enter` keyboard shortcut in SQL files
@@ -69,7 +64,6 @@ All commands are available via the Command Palette (`Ctrl+Shift+P`):
 | `DBLens: Open Query Editor` | Open the SQL editor |
 | `DBLens: Run Query` | Execute SQL from current editor |
 | `DBLens: Export as CSV` | Export a table to CSV |
-| `DBLens: Visualize Schema` | Show ER diagram |
 | `DBLens: Refresh` | Refresh the connection tree |
 
 ## Keyboard Shortcuts
@@ -97,7 +91,6 @@ This extension does not add any VS Code settings. All configuration is managed t
 ## Known Issues
 
 - SQLite uses an in-memory engine (sql.js) — very large databases may be slow to load
-- Schema visualization layout is auto-calculated and may overlap for databases with many tables
 
 ## License
 

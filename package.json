@@ -1,7 +1,7 @@
 {
   "name": "dblens",
   "displayName": "DBLens",
-  "description": "Connect to PostgreSQL, MySQL, and SQLite databases directly inside VS Code. Browse tables, run queries, and visualize schema as ER diagrams.",
+  "description": "Connect to PostgreSQL, MySQL, and SQLite databases directly inside VS Code. Browse tables and run queries.",
   "version": "0.1.0",
   "publisher": "dblens",
   "license": "MIT",
@@ -21,9 +21,7 @@
     "mysql",
     "sqlite",
     "query",
-    "schema",
-    "ER diagram",
-    "table viewer",
+"table viewer",
     "database explorer"
   ],
   "galleryBanner": {
@@ -110,13 +108,7 @@
         "category": "DBLens",
         "icon": "$(table)"
       },
-      {
-        "command": "dblens.visualizeSchema",
-        "title": "Visualize Schema",
-        "category": "DBLens",
-        "icon": "$(type-hierarchy)"
-      },
-      {
+{
         "command": "dblens.exportCSV",
         "title": "Export as CSV",
         "category": "DBLens",
@@ -173,12 +165,7 @@
           "when": "view == dblens-connections && viewItem =~ /^connection/",
           "group": "1_connection@2"
         },
-        {
-          "command": "dblens.visualizeSchema",
-          "when": "view == dblens-connections && viewItem == connection-connected",
-          "group": "2_schema@1"
-        },
-        {
+{
           "command": "dblens.viewTable",
           "when": "view == dblens-connections && viewItem == table",
           "group": "1_table@1"

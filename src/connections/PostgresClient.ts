@@ -19,6 +19,7 @@ export class PostgresClient implements DatabaseClient {
       password: this.password,
       connectionTimeoutMillis: 10000,
       statement_timeout: 30000,
+      ssl: this.config.ssl ? { rejectUnauthorized: false } : undefined,
     });
 
     // Handle unexpected connection loss
@@ -77,6 +78,37 @@ export class PostgresClient implements DatabaseClient {
       defaultValue: r.column_default as string | null,
       isPrimaryKey: pks.includes(r.column_name as string),
     }));
+  }
+
+  async getAllColumns(): Promise<Record<string, ColumnInfo[]>> {
+    const client = this.ensureConnected();
+    const result = await client.query(
+      `SELECT c.table_name, c.column_name, c.data_type, c.is_nullable, c.column_default,
+              CASE WHEN pk.column_name IS NOT NULL THEN true ELSE false END AS is_primary_key
+       FROM information_schema.columns c
+       LEFT JOIN (
+         SELECT kcu.table_name, kcu.column_name
+         FROM information_schema.table_constraints tc
+         JOIN information_schema.key_column_usage kcu
+           ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+         WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = 'public'
+       ) pk ON c.table_name = pk.table_name AND c.column_name = pk.column_name
+       WHERE c.table_schema = 'public'
+       ORDER BY c.table_name, c.ordinal_position`
+    );
+    const map: Record<string, ColumnInfo[]> = {};
+    for (const r of result.rows as Record<string, unknown>[]) {
+      const table = r.table_name as string;
+      if (!map[table]) { map[table] = []; }
+      map[table].push({
+        name: r.column_name as string,
+        type: r.data_type as string,
+        nullable: (r.is_nullable as string) === 'YES',
+        defaultValue: r.column_default as string | null,
+        isPrimaryKey: !!(r.is_primary_key),
+      });
+    }
+    return map;
   }
 
   async getForeignKeys(): Promise<ForeignKey[]> {

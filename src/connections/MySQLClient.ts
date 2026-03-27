@@ -18,6 +18,7 @@ export class MySQLClient implements DatabaseClient {
       user: this.config.username,
       password: this.password,
       connectTimeout: 10000,
+      ssl: this.config.ssl ? { rejectUnauthorized: false } : undefined,
     });
 
     // Handle unexpected connection loss
@@ -76,6 +77,36 @@ export class MySQLClient implements DatabaseClient {
       defaultValue: (r.COLUMN_DEFAULT || r.column_default) as string | null,
       isPrimaryKey: pks.includes((r.COLUMN_NAME || r.column_name) as string),
     }));
+  }
+
+  async getAllColumns(): Promise<Record<string, ColumnInfo[]>> {
+    const conn = this.ensureConnected();
+    const [rows] = await conn.query(
+      `SELECT c.TABLE_NAME, c.COLUMN_NAME, c.DATA_TYPE, c.IS_NULLABLE, c.COLUMN_DEFAULT,
+              CASE WHEN pk.COLUMN_NAME IS NOT NULL THEN 1 ELSE 0 END AS IS_PK
+       FROM information_schema.COLUMNS c
+       LEFT JOIN (
+         SELECT TABLE_NAME, COLUMN_NAME
+         FROM information_schema.KEY_COLUMN_USAGE
+         WHERE TABLE_SCHEMA = ? AND CONSTRAINT_NAME = 'PRIMARY'
+       ) pk ON c.TABLE_NAME = pk.TABLE_NAME AND c.COLUMN_NAME = pk.COLUMN_NAME
+       WHERE c.TABLE_SCHEMA = ?
+       ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION`,
+      [this.config.database, this.config.database]
+    );
+    const map: Record<string, ColumnInfo[]> = {};
+    for (const r of rows as Record<string, unknown>[]) {
+      const table = (r.TABLE_NAME || r.table_name) as string;
+      if (!map[table]) { map[table] = []; }
+      map[table].push({
+        name: (r.COLUMN_NAME || r.column_name) as string,
+        type: (r.DATA_TYPE || r.data_type) as string,
+        nullable: ((r.IS_NULLABLE || r.is_nullable) as string) === 'YES',
+        defaultValue: (r.COLUMN_DEFAULT || r.column_default) as string | null,
+        isPrimaryKey: !!(r.IS_PK || r.is_pk),
+      });
+    }
+    return map;
   }
 
   async getForeignKeys(): Promise<ForeignKey[]> {

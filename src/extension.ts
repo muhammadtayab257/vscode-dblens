@@ -10,6 +10,34 @@ let connectionManager: ConnectionManager;
 let connectionProvider: ConnectionProvider;
 let activeConnectionId: string | undefined;
 
+class QuickActionsProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
+  getTreeItems(): vscode.TreeItem[] {
+    const queryItem = new vscode.TreeItem('Open Query Editor', vscode.TreeItemCollapsibleState.None);
+    queryItem.command = { command: 'dblens.openQueryEditor', title: 'Open Query Editor', arguments: [] };
+    queryItem.iconPath = new vscode.ThemeIcon('terminal');
+    queryItem.tooltip = 'Open the SQL query editor panel';
+
+    const addItem = new vscode.TreeItem('Add Connection', vscode.TreeItemCollapsibleState.None);
+    addItem.command = { command: 'dblens.addConnection', title: 'Add Connection', arguments: [] };
+    addItem.iconPath = new vscode.ThemeIcon('add');
+    addItem.tooltip = 'Add a new database connection';
+
+    const refreshItem = new vscode.TreeItem('Refresh Connections', vscode.TreeItemCollapsibleState.None);
+    refreshItem.command = { command: 'dblens.refreshConnections', title: 'Refresh', arguments: [] };
+    refreshItem.iconPath = new vscode.ThemeIcon('refresh');
+    refreshItem.tooltip = 'Refresh the connections list';
+
+    return [queryItem, addItem, refreshItem];
+  }
+
+  getTreeChildren(): vscode.TreeItem[] { return []; }
+
+  getTreeItem(element: vscode.TreeItem): vscode.TreeItem { return element; }
+  getChildren(element?: vscode.TreeItem): vscode.TreeItem[] {
+    return element ? [] : this.getTreeItems();
+  }
+}
+
 export function activate(context: vscode.ExtensionContext) {
   connectionManager = new ConnectionManager(context);
   connectionProvider = new ConnectionProvider(connectionManager);
@@ -20,6 +48,13 @@ export function activate(context: vscode.ExtensionContext) {
     showCollapseAll: true,
   });
   context.subscriptions.push(treeView);
+
+  // Register Quick Actions view (static tree with labeled actions)
+  const quickActionsProvider = new QuickActionsProvider();
+  const quickActionsView = vscode.window.createTreeView('dblens-quickactions', {
+    treeDataProvider: quickActionsProvider,
+  });
+  context.subscriptions.push(quickActionsView);
 
   // Register all commands
   context.subscriptions.push(

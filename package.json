@@ -2,12 +2,12 @@
   "name": "dblens",
   "displayName": "DBLens",
   "description": "Connect to PostgreSQL, MySQL, and SQLite databases directly inside VS Code. Browse tables and run queries.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "dblens",
   "license": "MIT",
   "icon": "resources/icon.png",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.90.0"
   },
   "categories": [
     "Other",
@@ -41,6 +41,24 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "DBLens",
+      "properties": {
+        "dblens.openaiApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI API key for AI SQL generation. Used as fallback when GitHub Copilot is not available.",
+          "order": 1
+        },
+        "dblens.openaiModel": {
+          "type": "string",
+          "default": "gpt-4o-mini",
+          "enum": ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"],
+          "description": "OpenAI model to use for AI SQL generation.",
+          "order": 2
+        }
+      }
+    },
     "viewsContainers": {
       "activitybar": [
         {
@@ -56,9 +74,20 @@
           "id": "dblens-connections",
           "name": "Connections",
           "icon": "resources/database.svg"
+        },
+        {
+          "id": "dblens-quickactions",
+          "name": "Quick Actions",
+          "icon": "resources/database.svg"
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "dblens-connections",
+        "contents": "No database connections yet.\n\nAdd a connection to get started with PostgreSQL, MySQL, or SQLite.\n\n[$(add) Add Connection](command:dblens.addConnection)\n\nOnce connected, you can browse tables and run SQL queries directly inside VS Code."
+      }
+    ],
     "commands": [
       {
         "command": "dblens.addConnection",
@@ -123,7 +152,7 @@
         "command": "dblens.openQueryEditor",
         "title": "Open Query Editor",
         "category": "DBLens",
-        "icon": "$(edit)"
+        "icon": "$(terminal)"
       }
     ],
     "menus": {
@@ -141,6 +170,11 @@
         {
           "command": "dblens.refreshConnections",
           "when": "view == dblens-connections",
+          "group": "navigation"
+        },
+        {
+          "command": "dblens.openQueryEditor",
+          "when": "view == dblens-quickactions",
           "group": "navigation"
         }
       ],
@@ -202,7 +236,7 @@
     "@types/node": "^20.11.0",
     "@types/pg": "^8.16.0",
     "@types/sql.js": "^1.4.9",
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "^1.90.0",
     "typescript": "^5.3.3"
   },
   "dependencies": {

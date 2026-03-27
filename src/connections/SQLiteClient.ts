@@ -91,6 +91,15 @@ export class SQLiteClient implements DatabaseClient {
     }));
   }
 
+  async getAllColumns(): Promise<Record<string, ColumnInfo[]>> {
+    const tables = await this.getTables();
+    const map: Record<string, ColumnInfo[]> = {};
+    for (const table of tables) {
+      map[table] = await this.getColumns(table);
+    }
+    return map;
+  }
+
   async getForeignKeys(): Promise<ForeignKey[]> {
     const tables = await this.getTables();
     const foreignKeys: ForeignKey[] = [];

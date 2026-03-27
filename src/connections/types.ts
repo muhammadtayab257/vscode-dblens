@@ -7,6 +7,7 @@ export interface DBConnection {
   database: string;
   username?: string;
   filePath?: string;
+  ssl?: boolean;
 }
 
 export interface ColumnInfo {
@@ -44,6 +45,7 @@ export interface DatabaseClient {
   isConnected(): boolean;
   getTables(): Promise<string[]>;
   getColumns(tableName: string): Promise<ColumnInfo[]>;
+  getAllColumns(): Promise<Record<string, ColumnInfo[]>>;
   getForeignKeys(): Promise<ForeignKey[]>;
   getPrimaryKeys(tableName: string): Promise<string[]>;
   executeQuery(sql: string): Promise<QueryResult>;

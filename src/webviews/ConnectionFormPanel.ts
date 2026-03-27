@@ -88,6 +88,7 @@ export class ConnectionFormPanel {
           database: connection.database,
           username: connection.username,
           filePath: connection.filePath,
+          ssl: connection.ssl,
         },
       });
     }, 100);
@@ -214,6 +215,7 @@ export class ConnectionFormPanel {
       conn.host = (data.host as string) || 'localhost';
       conn.port = (data.port as number) || (type === 'postgresql' ? 5432 : 3306);
       conn.username = (data.username as string) || undefined;
+      conn.ssl = !!data.ssl;
     }
 
     return conn;

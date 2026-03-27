@@ -304,6 +304,37 @@
             to { transform: rotate(360deg); }
         }
 
+        /* ── Checkbox ──────────────────────────────────── */
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 2px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--vscode-focusBorder);
+            cursor: pointer;
+        }
+
+        .checkbox-group label {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--vscode-editor-foreground);
+            cursor: pointer;
+            margin-bottom: 0 !important;
+        }
+
+        .checkbox-hint {
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            margin-top: 3px;
+            margin-left: 24px;
+        }
+
         /* ── Hidden sections ────────────────────────────── */
 
         .hidden {
@@ -389,6 +420,13 @@
                 <input type="text" id="database" placeholder="mydb" autocomplete="off" spellcheck="false">
                 <div class="field-error" id="databaseError">Database name is required</div>
             </div>
+            <div class="form-group">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="sslCheckbox">
+                    <label for="sslCheckbox">Use SSL</label>
+                </div>
+                <div class="checkbox-hint">Enable for cloud databases (AWS RDS, Azure, etc.)</div>
+            </div>
         </div>
 
         <!-- Authentication (PostgreSQL / MySQL) -->
@@ -461,6 +499,7 @@
 
         const connStringInput = document.getElementById('connString');
         const connStringSection = document.getElementById('connStringSection');
+        const sslCheckbox = document.getElementById('sslCheckbox');
 
         // ── State ──────────────────────────────────────────
         let selectedType = 'postgresql';
@@ -617,6 +656,7 @@
                 data.database = databaseInput.value.trim();
                 data.username = usernameInput.value.trim() || undefined;
                 data.password = passwordInput.value || undefined;
+                data.ssl = sslCheckbox.checked;
             }
 
             if (editMode && editId) {
@@ -722,6 +762,7 @@
                         portInput.value = msg.data.port || (selectedType === 'postgresql' ? 5432 : 3306);
                         databaseInput.value = msg.data.database || '';
                         usernameInput.value = msg.data.username || '';
+                        sslCheckbox.checked = !!msg.data.ssl;
                     }
 
                     saveBtn.textContent = 'Save Changes';

@@ -9,14 +9,10 @@
     />
     <title>Query Result</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            background-color: var(--vscode-editor-background);
+            background: var(--vscode-editor-background);
             color: var(--vscode-editor-foreground);
             font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
             font-size: var(--vscode-font-size, 13px);
@@ -27,356 +23,244 @@
             flex-direction: column;
         }
 
-        /* ── SQL Display ─────────────────────────────────────── */
-
+        /* ── SQL Block ────────────────────────────────────── */
         .sql-block {
-            background-color: var(--vscode-textBlockQuote-background, var(--vscode-input-background));
-            border: 1px solid var(--vscode-widget-border, #3c3c3c);
-            border-radius: 3px;
+            background: var(--vscode-textBlockQuote-background, var(--vscode-input-background));
+            border: 1px solid var(--vscode-widget-border, #333);
+            border-radius: 6px;
             padding: 10px 14px;
-            margin: 10px 12px 0 12px;
-            max-height: 120px;
+            margin: 10px 14px 0 14px;
+            max-height: 100px;
             overflow-y: auto;
             flex-shrink: 0;
         }
 
         .sql-block pre {
-            font-family: var(--vscode-editor-font-family, 'Cascadia Code', 'Consolas', monospace);
-            font-size: var(--vscode-editor-font-size, 12px);
+            font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
+            font-size: 12px;
             color: var(--vscode-debugTokenExpression-string, #ce9178);
             white-space: pre-wrap;
             word-break: break-all;
         }
 
-        /* ── Status Bar ──────────────────────────────────────── */
-
+        /* ── Status Bar ───────────────────────────────────── */
         .status-bar {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 6px 14px;
-            margin: 8px 12px 0 12px;
-            background-color: var(--vscode-sideBar-background, var(--vscode-input-background));
-            border: 1px solid var(--vscode-widget-border, #3c3c3c);
-            border-radius: 3px;
+            padding: 8px 14px;
+            margin: 8px 14px 0 14px;
+            background: var(--vscode-sideBar-background, var(--vscode-input-background));
+            border: 1px solid var(--vscode-widget-border, #333);
+            border-radius: 6px;
             flex-shrink: 0;
-            min-height: 32px;
+            min-height: 36px;
         }
 
         .status-info {
             display: flex;
             gap: 18px;
             font-size: 12px;
-            color: var(--vscode-descriptionForeground, #858585);
+            color: var(--vscode-descriptionForeground);
         }
-
-        .status-info span {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-        }
-
-        .status-info .label {
-            color: var(--vscode-descriptionForeground, #858585);
-        }
-
-        .status-info .value {
-            color: var(--vscode-editor-foreground);
-        }
+        .status-info span { display: inline-flex; align-items: center; gap: 4px; }
+        .status-info .val { color: var(--vscode-editor-foreground); font-weight: 500; }
 
         .btn-export {
-            background-color: var(--vscode-button-background);
+            background: var(--vscode-button-background);
             color: var(--vscode-button-foreground);
             border: none;
-            border-radius: 3px;
-            padding: 4px 12px;
+            border-radius: 6px;
+            padding: 5px 14px;
             font-size: 12px;
-            cursor: pointer;
+            font-weight: 500;
             font-family: inherit;
-            transition: background-color 0.15s;
+            cursor: pointer;
+            transition: background 0.15s;
         }
+        .btn-export:hover { background: var(--vscode-button-hoverBackground); }
 
-        .btn-export:hover {
-            background-color: var(--vscode-button-hoverBackground);
-        }
-
-        /* ── Results Table Container ─────────────────────────── */
-
+        /* ── Table ─────────────────────────────────────────── */
         .table-container {
             flex: 1;
             overflow: auto;
-            margin: 8px 12px 12px 12px;
-            border: 1px solid var(--vscode-widget-border, #3c3c3c);
-            border-radius: 3px;
+            margin: 8px 14px 14px 14px;
+            border: 1px solid var(--vscode-widget-border, #333);
+            border-radius: 6px;
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
-            font-family: var(--vscode-editor-font-family, 'Cascadia Code', 'Consolas', monospace);
-            font-size: var(--vscode-editor-font-size, 12px);
+            font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
+            font-size: 12px;
         }
 
-        thead {
-            position: sticky;
-            top: 0;
-            z-index: 1;
-        }
+        thead { position: sticky; top: 0; z-index: 1; }
 
         thead th {
-            background-color: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-sideBar-background));
+            background: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-sideBar-background));
             color: var(--vscode-textLink-foreground, #4fc1ff);
             font-weight: 600;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
             text-align: left;
-            padding: 6px 12px;
+            padding: 7px 14px;
             border-bottom: 2px solid var(--vscode-widget-border, #404040);
-            border-right: 1px solid var(--vscode-widget-border, #3c3c3c);
+            border-right: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.15));
             white-space: nowrap;
             user-select: none;
         }
+        thead th:last-child { border-right: none; }
 
-        thead th:last-child {
-            border-right: none;
-        }
-
-        /* Row number column */
-        thead th.row-num,
-        tbody td.row-num {
-            color: var(--vscode-editorLineNumber-foreground, #858585);
+        thead th.row-num, tbody td.row-num {
+            color: var(--vscode-editorLineNumber-foreground, #555);
             text-align: right;
-            padding-right: 10px;
+            padding: 5px 10px;
             width: 1%;
             white-space: nowrap;
-            background-color: var(--vscode-sideBar-background, var(--vscode-input-background));
+            background: var(--vscode-sideBar-background, var(--vscode-input-background));
             border-right: 2px solid var(--vscode-widget-border, #404040);
             user-select: none;
+            font-size: 11px;
         }
 
-        tbody tr {
-            border-bottom: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.2));
-        }
-
-        tbody tr:hover {
-            background-color: var(--vscode-list-hoverBackground);
-        }
+        tbody tr { border-bottom: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.12)); }
+        tbody tr:hover { background: var(--vscode-list-hoverBackground); }
+        tbody tr:nth-child(even) { background: var(--vscode-editorGroupHeader-tabsBackground, rgba(128,128,128,0.03)); }
+        tbody tr:nth-child(even):hover { background: var(--vscode-list-hoverBackground); }
 
         tbody td {
-            padding: 4px 12px;
-            border-right: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.1));
+            padding: 5px 14px;
+            border-right: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.08));
             white-space: pre;
             max-width: 400px;
             overflow: hidden;
             text-overflow: ellipsis;
             cursor: default;
         }
+        tbody td:last-child { border-right: none; }
 
-        tbody td:last-child {
-            border-right: none;
-        }
-
-        tbody tr:nth-child(even) {
-            background-color: var(--vscode-editor-background);
-        }
-
-        tbody tr:nth-child(odd) {
-            background-color: var(--vscode-editorGroupHeader-tabsBackground, rgba(128,128,128,0.04));
-        }
-
-        tbody tr:hover {
-            background-color: var(--vscode-list-hoverBackground);
-        }
-
-        /* ── Cell click highlight ─────────────────────── */
         tbody td.cell-clicked {
             outline: 2px solid var(--vscode-focusBorder);
             outline-offset: -2px;
         }
 
-        .null-value {
-            color: var(--vscode-descriptionForeground, #6a6a6a);
-            font-style: italic;
-        }
+        .null-value { color: var(--vscode-descriptionForeground); font-style: italic; }
 
-        /* ── Loading Indicator ───────────────────────────────── */
-
+        /* ── States ────────────────────────────────────────── */
         .loading-container {
             display: none;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             flex: 1;
-            gap: 16px;
+            gap: 14px;
         }
-
-        .loading-container.visible {
-            display: flex;
-        }
+        .loading-container.visible { display: flex; }
 
         .spinner {
-            width: 36px;
-            height: 36px;
-            border: 3px solid var(--vscode-widget-border, #3c3c3c);
-            border-top-color: var(--vscode-focusBorder, #0e639c);
+            width: 32px; height: 32px;
+            border: 3px solid var(--vscode-widget-border, #333);
+            border-top-color: var(--vscode-focusBorder);
             border-radius: 50%;
-            animation: spin 0.8s linear infinite;
+            animation: spin 0.7s linear infinite;
         }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
-        }
+        .loading-text { color: var(--vscode-descriptionForeground); font-size: 13px; }
 
-        .loading-text {
-            color: var(--vscode-descriptionForeground, #858585);
-            font-size: 13px;
-        }
-
-        /* ── Error Display ───────────────────────────────────── */
-
-        .error-container {
-            display: none;
-            margin: 10px 12px;
-            flex-shrink: 0;
-        }
-
-        .error-container.visible {
-            display: block;
-        }
+        .error-container { display: none; margin: 10px 14px; flex-shrink: 0; }
+        .error-container.visible { display: block; }
 
         .error-box {
-            background-color: var(--vscode-inputValidation-errorBackground, #332222);
+            background: var(--vscode-inputValidation-errorBackground, #2d1111);
             border: 1px solid var(--vscode-inputValidation-errorBorder, #f14c4c);
             border-left: 4px solid var(--vscode-inputValidation-errorBorder, #f14c4c);
-            border-radius: 3px;
+            border-radius: 6px;
             padding: 12px 16px;
         }
-
         .error-header {
             color: var(--vscode-errorForeground, #f14c4c);
             font-weight: 600;
             font-size: 13px;
             margin-bottom: 6px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
         }
-
         .error-message {
             color: var(--vscode-errorForeground, #e88e8e);
-            font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
+            font-family: var(--vscode-editor-font-family, monospace);
             font-size: 12px;
             white-space: pre-wrap;
             word-break: break-word;
-            line-height: 1.5;
-            opacity: 0.9;
+            opacity: 0.85;
         }
-
-        .error-time {
-            color: var(--vscode-descriptionForeground, #858585);
-            font-size: 11px;
-            margin-top: 8px;
-        }
-
-        /* ── Generic Error Message ───────────────────────────── */
+        .error-time { color: var(--vscode-descriptionForeground); font-size: 11px; margin-top: 8px; }
 
         .generic-error {
-            display: none;
-            margin: 10px 12px;
-            padding: 10px 14px;
-            background-color: var(--vscode-inputValidation-errorBackground, #332222);
+            display: none; margin: 10px 14px; padding: 10px 14px;
+            background: var(--vscode-inputValidation-errorBackground, #2d1111);
             border: 1px solid var(--vscode-inputValidation-errorBorder, #f14c4c);
-            border-radius: 3px;
+            border-radius: 6px;
             color: var(--vscode-errorForeground, #f14c4c);
             font-size: 13px;
         }
-
-        .generic-error.visible {
-            display: block;
-        }
-
-        /* ── Empty State ─────────────────────────────────────── */
+        .generic-error.visible { display: block; }
 
         .empty-state {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex: 1;
-            color: var(--vscode-descriptionForeground, #858585);
-            font-size: 13px;
+            display: flex; align-items: center; justify-content: center;
+            flex: 1; color: var(--vscode-descriptionForeground); font-size: 13px;
         }
 
-        /* ── Hidden utility ──────────────────────────────────── */
+        .hidden { display: none !important; }
 
-        .hidden {
-            display: none !important;
-        }
-
-        /* ── Copy Toast ────────────────────────────────── */
-        .copy-toast {
+        /* ── Toast ──────────────────────────────────────────── */
+        .toast {
             position: fixed;
             bottom: 40px;
             left: 50%;
-            transform: translateX(-50%) translateY(20px);
-            background-color: var(--vscode-editorWidget-background, #252526);
+            transform: translateX(-50%) translateY(16px);
+            background: var(--vscode-editorWidget-background, #252526);
             color: var(--vscode-editorWidget-foreground, #ccc);
             border: 1px solid var(--vscode-widget-border, #454545);
-            border-radius: 4px;
+            border-radius: 6px;
             padding: 6px 14px;
             font-size: 12px;
             pointer-events: none;
             opacity: 0;
             transition: opacity 0.2s, transform 0.2s;
             z-index: 100;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.35);
         }
-
-        .copy-toast.visible {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
-        }
+        .toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
     </style>
 </head>
 <body>
-    <!-- SQL Display -->
-    <div class="sql-block hidden" id="sqlBlock">
-        <pre id="sqlText"></pre>
-    </div>
+    <div class="sql-block hidden" id="sqlBlock"><pre id="sqlText"></pre></div>
 
-    <!-- Loading Indicator -->
     <div class="loading-container" id="loadingContainer">
         <div class="spinner"></div>
         <div class="loading-text">Executing query...</div>
     </div>
 
-    <!-- Error Container (query errors) -->
     <div class="error-container" id="errorContainer">
         <div class="error-box">
-            <div class="error-header">Query Error</div>
+            <div class="error-header">&#9888; Query Error</div>
             <div class="error-message" id="errorMessage"></div>
             <div class="error-time" id="errorTime"></div>
         </div>
     </div>
 
-    <!-- Generic Error -->
     <div class="generic-error" id="genericError"></div>
 
-    <!-- Status Bar -->
     <div class="status-bar hidden" id="statusBar">
         <div class="status-info">
-            <span>
-                <span class="label">Rows:</span>
-                <span class="value" id="rowCount">0</span>
-            </span>
-            <span>
-                <span class="label">Time:</span>
-                <span class="value" id="execTime">0 ms</span>
-            </span>
+            <span>Rows: <span class="val" id="rowCount">0</span></span>
+            <span>Time: <span class="val" id="execTime">0 ms</span></span>
         </div>
-        <button class="btn-export" id="btnExport" title="Export results as CSV">Export CSV</button>
+        <button class="btn-export" id="btnExport" title="Export results as CSV">&#8615; Export CSV</button>
     </div>
 
-    <!-- Results Table -->
     <div class="table-container hidden" id="tableContainer">
         <table>
             <thead id="tableHead"></thead>
@@ -384,18 +268,13 @@
         </table>
     </div>
 
-    <!-- Empty State (initial) -->
-    <div class="empty-state" id="emptyState">
-        No query results to display.
-    </div>
+    <div class="empty-state" id="emptyState">No query results to display.</div>
 
-    <!-- Copy Toast -->
-    <div class="copy-toast" id="copyToast">Copied!</div>
+    <div class="toast" id="copyToast">Copied!</div>
 
     <script>
         const vscode = acquireVsCodeApi();
 
-        // ── DOM references ──────────────────────────────────────
         const sqlBlock = document.getElementById('sqlBlock');
         const sqlText = document.getElementById('sqlText');
         const loadingContainer = document.getElementById('loadingContainer');
@@ -413,22 +292,17 @@
         const emptyState = document.getElementById('emptyState');
         const copyToast = document.getElementById('copyToast');
 
-        // ── Current state for export ────────────────────────────
         let currentColumns = [];
         let currentRows = [];
 
-        // ── Copy Toast ───────────────────────────────────
         let toastTimeout = null;
-        function showCopyToast(text) {
+        function showToast(text) {
             copyToast.textContent = text || 'Copied!';
             copyToast.classList.add('visible');
             clearTimeout(toastTimeout);
-            toastTimeout = setTimeout(function() {
-                copyToast.classList.remove('visible');
-            }, 1500);
+            toastTimeout = setTimeout(function() { copyToast.classList.remove('visible'); }, 1500);
         }
 
-        // ── Helper: reset all views ─────────────────────────────
         function resetViews() {
             sqlBlock.classList.add('hidden');
             loadingContainer.classList.remove('visible');
@@ -439,183 +313,97 @@
             emptyState.classList.add('hidden');
         }
 
-        // ── Helper: show SQL block ──────────────────────────────
-        function showSql(sql) {
-            if (sql) {
-                sqlText.textContent = sql;
-                sqlBlock.classList.remove('hidden');
-            }
+        function showSql(sql) { if (sql) { sqlText.textContent = sql; sqlBlock.classList.remove('hidden'); } }
+
+        function esc(text) { var d = document.createElement('div'); d.textContent = text; return d.innerHTML; }
+
+        function fmtCell(value) {
+            if (value === null || value === undefined) return '<span class="null-value">NULL</span>';
+            if (typeof value === 'object') return esc(JSON.stringify(value));
+            return esc(String(value));
         }
 
-        // ── Helper: escape HTML ─────────────────────────────────
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        // ── Helper: format cell value ───────────────────────────
-        function formatCell(value) {
-            if (value === null || value === undefined) {
-                return '<span class="null-value">NULL</span>';
-            }
-            if (typeof value === 'object') {
-                return escapeHtml(JSON.stringify(value));
-            }
-            return escapeHtml(String(value));
-        }
-
-        // ── Helper: get raw value for copy ──────────────────────
-        function rawValue(value) {
+        function rawVal(value) {
             if (value === null || value === undefined) return '';
             if (typeof value === 'object') return JSON.stringify(value);
             return String(value);
         }
 
-        // ── Helper: format execution time ───────────────────────
-        function formatTime(ms) {
-            if (ms === undefined || ms === null) {
-                return '-- ms';
-            }
-            if (ms < 1000) {
-                return ms + ' ms';
-            }
+        function fmtTime(ms) {
+            if (ms === undefined || ms === null) return '-- ms';
+            if (ms < 1000) return ms + ' ms';
             return (ms / 1000).toFixed(2) + ' s';
         }
 
-        // ── Render: loading state ───────────────────────────────
-        function renderLoading(sql) {
-            resetViews();
-            showSql(sql);
-            loadingContainer.classList.add('visible');
-        }
+        function renderLoading(sql) { resetViews(); showSql(sql); loadingContainer.classList.add('visible'); }
 
-        // ── Render: query result ────────────────────────────────
         function renderResult(data) {
-            resetViews();
-            showSql(data.sql);
+            resetViews(); showSql(data.sql);
+            var columns = data.columns || [], rows = data.rows || [];
+            var rowCount = data.rowCount !== undefined ? data.rowCount : rows.length;
+            currentColumns = columns; currentRows = rows;
 
-            const columns = data.columns || [];
-            const rows = data.rows || [];
-            const rowCount = data.rowCount !== undefined ? data.rowCount : rows.length;
-            const executionTimeMs = data.executionTimeMs;
-
-            currentColumns = columns;
-            currentRows = rows;
-
-            // Status bar
             rowCountEl.textContent = rowCount.toLocaleString();
-            execTimeEl.textContent = formatTime(executionTimeMs);
+            execTimeEl.textContent = fmtTime(data.executionTimeMs);
             statusBar.classList.remove('hidden');
 
             if (columns.length === 0) {
                 emptyState.textContent = 'Query executed successfully. No columns returned.';
-                emptyState.classList.remove('hidden');
-                return;
+                emptyState.classList.remove('hidden'); return;
             }
 
-            // Build table header
-            let headHtml = '<tr>';
-            headHtml += '<th class="row-num">#</th>';
-            for (const col of columns) {
-                headHtml += '<th>' + escapeHtml(col) + '</th>';
-            }
+            var headHtml = '<tr><th class="row-num">#</th>';
+            for (var i = 0; i < columns.length; i++) headHtml += '<th>' + esc(columns[i]) + '</th>';
             headHtml += '</tr>';
             tableHead.innerHTML = headHtml;
 
-            // Build table body
-            let bodyHtml = '';
-            for (let i = 0; i < rows.length; i++) {
-                const row = rows[i];
-                bodyHtml += '<tr>';
-                bodyHtml += '<td class="row-num">' + (i + 1) + '</td>';
-                for (const col of columns) {
-                    bodyHtml += '<td data-raw="' + escapeHtml(rawValue(row[col])) + '">' + formatCell(row[col]) + '</td>';
-                }
+            var bodyHtml = '';
+            for (var j = 0; j < rows.length; j++) {
+                bodyHtml += '<tr><td class="row-num">' + (j + 1) + '</td>';
+                for (var k = 0; k < columns.length; k++)
+                    bodyHtml += '<td data-raw="' + esc(rawVal(rows[j][columns[k]])) + '">' + fmtCell(rows[j][columns[k]]) + '</td>';
                 bodyHtml += '</tr>';
             }
             tableBody.innerHTML = bodyHtml;
-
             tableContainer.classList.remove('hidden');
         }
 
-        // ── Render: query error ─────────────────────────────────
         function renderQueryError(data) {
-            resetViews();
-            showSql(data.sql);
-
+            resetViews(); showSql(data.sql);
             errorMessage.textContent = data.error || 'Unknown error';
             if (data.executionTimeMs !== undefined && data.executionTimeMs !== null) {
-                errorTime.textContent = 'Executed in ' + formatTime(data.executionTimeMs);
-                errorTime.style.display = 'block';
-            } else {
-                errorTime.style.display = 'none';
-            }
+                errorTime.textContent = 'Executed in ' + fmtTime(data.executionTimeMs); errorTime.style.display = 'block';
+            } else { errorTime.style.display = 'none'; }
             errorContainer.classList.add('visible');
         }
 
-        // ── Render: generic error ───────────────────────────────
         function renderGenericError(message) {
             resetViews();
             genericError.textContent = message || 'An unexpected error occurred.';
             genericError.classList.add('visible');
         }
 
-        // ── Export CSV ──────────────────────────────────────────
-        function exportCsv() {
-            if (currentColumns.length === 0) {
-                return;
-            }
-            vscode.postMessage({
-                type: 'export',
-                columns: currentColumns,
-                rows: currentRows
-            });
-        }
-
-        btnExport.addEventListener('click', exportCsv);
-
-        // ── Cell Click (Copy) ───────────────────────────────────
-        let clickedCell = null;
-        tableBody.addEventListener('click', function(e) {
-            const td = e.target.closest('td:not(.row-num)');
-            if (!td) return;
-
-            if (clickedCell) clickedCell.classList.remove('cell-clicked');
-            td.classList.add('cell-clicked');
-            clickedCell = td;
-
-            const raw = td.getAttribute('data-raw');
-            if (raw !== null && raw !== '') {
-                navigator.clipboard.writeText(raw).then(function() {
-                    showCopyToast('Copied to clipboard');
-                }).catch(function() {});
-            }
+        btnExport.addEventListener('click', function() {
+            if (currentColumns.length === 0) return;
+            vscode.postMessage({ type: 'export', columns: currentColumns, rows: currentRows });
         });
 
-        // ── Message handler ─────────────────────────────────────
-        window.addEventListener('message', function (event) {
-            const message = event.data;
-            if (!message || !message.type) {
-                return;
-            }
+        let clickedCell = null;
+        tableBody.addEventListener('click', function(e) {
+            var td = e.target.closest('td:not(.row-num)'); if (!td) return;
+            if (clickedCell) clickedCell.classList.remove('cell-clicked');
+            td.classList.add('cell-clicked'); clickedCell = td;
+            var raw = td.getAttribute('data-raw');
+            if (raw !== null && raw !== '') navigator.clipboard.writeText(raw).then(function() { showToast('Copied to clipboard'); }).catch(function() {});
+        });
 
-            switch (message.type) {
-                case 'loading':
-                    renderLoading(message.sql);
-                    break;
-
-                case 'queryResult':
-                    renderResult(message);
-                    break;
-
-                case 'queryError':
-                    renderQueryError(message);
-                    break;
-
-                case 'error':
-                    renderGenericError(message.message);
-                    break;
+        window.addEventListener('message', function(event) {
+            var msg = event.data; if (!msg || !msg.type) return;
+            switch (msg.type) {
+                case 'loading': renderLoading(msg.sql); break;
+                case 'queryResult': renderResult(msg); break;
+                case 'queryError': renderQueryError(msg); break;
+                case 'error': renderGenericError(msg.message); break;
             }
         });
     </script>

@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';" />
+    <title>ER Diagram</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html, body {
+            height: 100%; overflow: hidden;
+            background: var(--vscode-editor-background);
+            color: var(--vscode-editor-foreground);
+            font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+            font-size: var(--vscode-font-size, 13px);
+        }
+
+        #app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+        /* ── Toolbar ─────────────────────────────────── */
+        .toolbar {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 14px;
+            background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+            border-bottom: 1px solid var(--vscode-widget-border, #333);
+            flex-shrink: 0;
+        }
+        .toolbar .title { font-weight: 700; font-size: 13px; margin-right: 8px; white-space: nowrap; }
+        .toolbar .search-box {
+            position: relative; max-width: 220px;
+        }
+        .toolbar .search-box input {
+            width: 100%; padding: 5px 10px 5px 28px;
+            background: var(--vscode-input-background);
+            border: 1px solid var(--vscode-input-border, transparent);
+            border-radius: 6px; color: var(--vscode-input-foreground);
+            font-size: 12px; font-family: inherit; outline: none;
+        }
+        .toolbar .search-box input:focus { border-color: var(--vscode-focusBorder); }
+        .toolbar .search-box input::placeholder { color: var(--vscode-input-placeholderForeground); }
+        .toolbar .search-box .ico { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--vscode-input-placeholderForeground); font-size: 12px; pointer-events: none; }
+        .spacer { flex: 1; }
+        .separator { width: 1px; height: 20px; background: var(--vscode-widget-border, #333); margin: 0 2px; }
+
+        .tb { display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+            padding: 5px 10px; border: none; border-radius: 5px;
+            font-size: 11px; font-weight: 500; font-family: inherit;
+            cursor: pointer; white-space: nowrap; transition: all 0.12s;
+            background: var(--vscode-button-secondaryBackground, #333);
+            color: var(--vscode-button-secondaryForeground, #ccc);
+        }
+        .tb:hover { background: var(--vscode-button-secondaryHoverBackground, #444); }
+        .tb.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+        .tb.primary:hover { background: var(--vscode-button-hoverBackground); }
+        .zoom-label { font-size: 11px; color: var(--vscode-descriptionForeground); min-width: 36px; text-align: center; }
+
+        /* ── Canvas Area ─────────────────────────────── */
+        .canvas-area {
+            flex: 1; position: relative; overflow: hidden;
+            cursor: grab;
+        }
+        .canvas-area.dragging-card { cursor: default; }
+        .canvas-area.panning { cursor: grabbing; }
+
+        .canvas {
+            position: absolute; top: 0; left: 0;
+            transform-origin: 0 0;
+            will-change: transform;
+        }
+
+        /* ── SVG Lines ───────────────────────────────── */
+        .erd-svg {
+            position: absolute; top: 0; left: 0;
+            pointer-events: none;
+            overflow: visible;
+        }
+        .erd-svg path {
+            fill: none;
+            stroke: var(--vscode-editorLineNumber-foreground, #444);
+            stroke-width: 1;
+            opacity: 0.3;
+            transition: stroke 0.15s, stroke-width 0.15s, opacity 0.15s;
+            pointer-events: stroke;
+        }
+        .erd-svg path.highlight {
+            stroke: var(--vscode-textLink-foreground, #4fc1ff);
+            stroke-width: 2.5;
+            opacity: 1;
+        }
+        .erd-svg .arrow { opacity: 0.3; transition: opacity 0.15s; }
+        .erd-svg .arrow.highlight { opacity: 1; fill: var(--vscode-textLink-foreground, #4fc1ff); }
+        .erd-svg text {
+            font-family: var(--vscode-font-family, sans-serif);
+            font-size: 10px;
+            fill: var(--vscode-descriptionForeground, #888);
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+        .erd-svg text.highlight { opacity: 1; fill: var(--vscode-textLink-foreground, #4fc1ff); }
+
+        /* When a table is hovered, dim non-related cards */
+        .table-card.dimmed { opacity: 0.3; transition: opacity 0.15s; }
+
+        /* ── Table Cards ─────────────────────────────── */
+        .table-card {
+            position: absolute;
+            min-width: 200px; max-width: 320px;
+            background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+            border: 1px solid var(--vscode-widget-border, #444);
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+            overflow: hidden;
+            cursor: move;
+            transition: box-shadow 0.15s, border-color 0.15s;
+            user-select: none;
+        }
+        .table-card:hover { border-color: var(--vscode-focusBorder); box-shadow: 0 4px 16px rgba(0,0,0,0.35); }
+        .table-card.selected { border-color: var(--vscode-textLink-foreground, #4fc1ff); box-shadow: 0 0 0 2px rgba(79,193,255,0.3); }
+        .table-card.search-match { border-color: #ee9d28; box-shadow: 0 0 0 2px rgba(238,157,40,0.4); }
+
+        .card-header {
+            padding: 8px 12px;
+            background: var(--vscode-editorGroupHeader-tabsBackground, rgba(128,128,128,0.1));
+            border-bottom: 1px solid var(--vscode-widget-border, #444);
+            font-weight: 700; font-size: 12px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            color: var(--vscode-textLink-foreground, #4fc1ff);
+        }
+
+        .card-body { max-height: 280px; overflow-y: auto; }
+
+        .col-row {
+            display: flex; align-items: center; gap: 6px;
+            padding: 3px 12px; font-size: 11.5px;
+            border-bottom: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.1));
+            white-space: nowrap; overflow: hidden;
+        }
+        .col-row:last-child { border-bottom: none; }
+        .col-row:hover { background: var(--vscode-list-hoverBackground); }
+        .col-row.highlight { background: rgba(79,193,255,0.12); }
+
+        .col-icon { width: 14px; text-align: center; flex-shrink: 0; font-size: 10px; }
+        .col-icon.pk { color: #ee9d28; }
+        .col-icon.fk { color: #4fc1ff; }
+        .col-icon.normal { color: var(--vscode-descriptionForeground); opacity: 0.4; }
+
+        .col-name { flex: 1; overflow: hidden; text-overflow: ellipsis; color: var(--vscode-editor-foreground); }
+        .col-name.nullable { opacity: 0.6; }
+
+        .col-type { font-size: 10px; color: var(--vscode-descriptionForeground); flex-shrink: 0; }
+
+        .col-expand {
+            padding: 5px 12px; font-size: 11px; color: var(--vscode-textLink-foreground, #4fc1ff);
+            cursor: pointer; text-align: center;
+            border-top: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.1));
+        }
+        .col-expand:hover { background: var(--vscode-list-hoverBackground); }
+
+        /* ── Minimap ─────────────────────────────────── */
+        .minimap {
+            position: absolute; bottom: 12px; right: 12px;
+            width: 160px; height: 110px;
+            background: var(--vscode-sideBar-background, rgba(30,30,30,0.9));
+            border: 1px solid var(--vscode-widget-border, #444);
+            border-radius: 6px;
+            overflow: hidden; z-index: 10;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            cursor: crosshair;
+        }
+        .minimap canvas { width: 100%; height: 100%; }
+        .minimap-viewport {
+            position: absolute;
+            border: 1.5px solid var(--vscode-textLink-foreground, #4fc1ff);
+            background: rgba(79,193,255,0.08);
+            pointer-events: none;
+        }
+
+        /* ── States ──────────────────────────────────── */
+        .state-msg {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            flex: 1; gap: 12px; color: var(--vscode-descriptionForeground); font-size: 13px;
+        }
+        .state-msg.hidden { display: none; }
+        .spinner { width: 32px; height: 32px; border: 3px solid var(--vscode-widget-border, #333); border-top-color: var(--vscode-focusBorder); border-radius: 50%; animation: spin 0.7s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .stats-bar {
+            display: flex; align-items: center; gap: 16px;
+            padding: 4px 14px;
+            background: var(--vscode-statusBar-background, #007acc);
+            color: var(--vscode-statusBar-foreground, #fff);
+            font-size: 11px; flex-shrink: 0;
+        }
+        .stats-bar span { display: inline-flex; align-items: center; gap: 4px; }
+    </style>
+</head>
+<body>
+<div id="app">
+    <div class="toolbar">
+        <span class="title" id="erdTitle">ER Diagram</span>
+        <div class="search-box">
+            <span class="ico">&#128269;</span>
+            <input type="text" id="searchInput" placeholder="Find table..." spellcheck="false" autocomplete="off" />
+        </div>
+        <div class="spacer"></div>
+        <button class="tb" id="btnZoomOut" title="Zoom out">-</button>
+        <span class="zoom-label" id="zoomLabel">100%</span>
+        <button class="tb" id="btnZoomIn" title="Zoom in">+</button>
+        <button class="tb" id="btnFitAll" title="Fit all tables in view">Fit All</button>
+        <div class="separator"></div>
+        <button class="tb" id="btnRelayout" title="Re-run auto layout">Layout</button>
+        <button class="tb" id="btnRefresh" title="Refresh schema">Refresh</button>
+        <div class="separator"></div>
+        <button class="tb" id="btnExportPng">PNG</button>
+        <button class="tb" id="btnExportSvg">SVG</button>
+    </div>
+
+    <div class="state-msg" id="loadingState">
+        <div class="spinner"></div>
+        <div>Loading schema...</div>
+    </div>
+
+    <div class="state-msg hidden" id="errorState">
+        <div style="font-size:28px;opacity:0.4;">&#9888;</div>
+        <div id="errorMsg">Error</div>
+    </div>
+
+    <div class="state-msg hidden" id="emptyState">
+        <div style="font-size:28px;opacity:0.4;">&#128196;</div>
+        <div>No tables found in this database.</div>
+    </div>
+
+    <div class="canvas-area hidden" id="canvasArea">
+        <div class="canvas" id="canvas">
+            <svg class="erd-svg" id="erdSvg"></svg>
+        </div>
+        <div class="minimap" id="minimap">
+            <canvas id="minimapCanvas"></canvas>
+            <div class="minimap-viewport" id="minimapViewport"></div>
+        </div>
+    </div>
+
+    <div class="stats-bar hidden" id="statsBar">
+        <span id="statTables">Tables: 0</span>
+        <span id="statRelations">Relations: 0</span>
+        <span id="statColumns">Columns: 0</span>
+    </div>
+</div>
+
+<script>
+const vscode = acquireVsCodeApi();
+
+// ── State ───────────────────────────────────────
+let tables = [], columns = {}, foreignKeys = [];
+let cardPositions = {}; // {tableName: {x, y, w, h}}
+let zoom = 1, panX = 0, panY = 0;
+let selectedTable = null;
+const CARD_GAP_X = 60, CARD_GAP_Y = 40;
+const COLLAPSE_THRESHOLD = 12;
+
+// ── DOM ─────────────────────────────────────────
+const canvasArea = document.getElementById('canvasArea');
+const canvas = document.getElementById('canvas');
+const erdSvg = document.getElementById('erdSvg');
+const searchInput = document.getElementById('searchInput');
+const zoomLabel = document.getElementById('zoomLabel');
+const loadingState = document.getElementById('loadingState');
+const errorState = document.getElementById('errorState');
+const emptyState = document.getElementById('emptyState');
+const statsBar = document.getElementById('statsBar');
+const minimapCanvas = document.getElementById('minimapCanvas');
+const minimapViewport = document.getElementById('minimapViewport');
+
+// ── Helpers ─────────────────────────────────────
+function esc(s) { if (!s) return ''; var d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
+
+// ── Layout Algorithm ────────────────────────────
+const MAX_PER_ROW = 5;
+
+function getCardDim(t) {
+    const cols = columns[t] || [];
+    const nameLen = Math.max(t.length * 8 + 24, 200);
+    const longestCol = cols.reduce(function(max, c) { return Math.max(max, (c.name.length + c.type.length) * 7 + 60); }, 0);
+    const w = Math.min(Math.max(nameLen, longestCol, 220), 300);
+    const visibleCols = Math.min(cols.length, COLLAPSE_THRESHOLD);
+    const h = 36 + visibleCols * 24 + (cols.length > COLLAPSE_THRESHOLD ? 28 : 0);
+    return { w: w, h: h };
+}
+
+function computeLayout() {
+    // Build adjacency
+    var adj = {};
+    tables.forEach(function(t) { adj[t] = new Set(); });
+    foreignKeys.forEach(function(fk) {
+        if (adj[fk.fromTable] && adj[fk.toTable]) {
+            adj[fk.fromTable].add(fk.toTable);
+            adj[fk.toTable].add(fk.fromTable);
+        }
+    });
+
+    // Find connected components via BFS
+    var visited = new Set();
+    var components = [];
+
+    // Sort by degree descending — start with most connected
+    var sorted = tables.slice().sort(function(a, b) { return (adj[b] || new Set()).size - (adj[a] || new Set()).size; });
+
+    sorted.forEach(function(start) {
+        if (visited.has(start)) return;
+        var component = [];
+        var queue = [start];
+        visited.add(start);
+        while (queue.length > 0) {
+            var node = queue.shift();
+            component.push(node);
+            (adj[node] || new Set()).forEach(function(neighbor) {
+                if (!visited.has(neighbor)) {
+                    visited.add(neighbor);
+                    queue.push(neighbor);
+                }
+            });
+        }
+        // Sort within component: most connected first
+        component.sort(function(a, b) { return (adj[b] || new Set()).size - (adj[a] || new Set()).size; });
+        components.push(component);
+    });
+
+    // Sort components: largest first
+    components.sort(function(a, b) { return b.length - a.length; });
+
+    // Lay out each component, then stack components vertically
+    var globalY = 40;
+
+    components.forEach(function(comp) {
+        // BFS layers within this component
+        var compVisited = new Set();
+        var layers = [];
+        var root = comp[0];
+        var bfsQueue = [root];
+        compVisited.add(root);
+
+        while (bfsQueue.length > 0) {
+            var layer = bfsQueue.slice();
+            bfsQueue = [];
+            layer.forEach(function(node) {
+                (adj[node] || new Set()).forEach(function(neighbor) {
+                    if (!compVisited.has(neighbor) && comp.includes(neighbor)) {
+                        compVisited.add(neighbor);
+                        bfsQueue.push(neighbor);
+                    }
+                });
+            });
+            layers.push(layer);
+        }
+
+        // Add any unvisited in this component (isolated within component)
+        comp.forEach(function(t) {
+            if (!compVisited.has(t)) {
+                layers.push([t]);
+                compVisited.add(t);
+            }
+        });
+
+        // Split layers that exceed MAX_PER_ROW
+        var splitLayers = [];
+        layers.forEach(function(layer) {
+            for (var i = 0; i < layer.length; i += MAX_PER_ROW) {
+                splitLayers.push(layer.slice(i, i + MAX_PER_ROW));
+            }
+        });
+
+        // Position each row
+        var compStartY = globalY;
+        splitLayers.forEach(function(row) {
+            // Calculate total width of row to center it
+            var totalW = 0;
+            var dims = [];
+            row.forEach(function(t) {
+                var d = getCardDim(t);
+                dims.push(d);
+                totalW += d.w;
+            });
+            totalW += (row.length - 1) * CARD_GAP_X;
+
+            var startX = 40;
+            var currentX = startX;
+            var maxH = 0;
+
+            row.forEach(function(t, i) {
+                var dim = dims[i];
+                cardPositions[t] = { x: currentX, y: globalY, w: dim.w, h: dim.h };
+                currentX += dim.w + CARD_GAP_X;
+                maxH = Math.max(maxH, dim.h);
+            });
+
+            globalY += maxH + CARD_GAP_Y + 10;
+        });
+
+        // Add extra gap between components
+        globalY += 30;
+    });
+
+    // Collision resolution — 10 passes
+    var allTables = Object.keys(cardPositions);
+    for (var iter = 0; iter < 10; iter++) {
+        var moved = false;
+        for (var i = 0; i < allTables.length; i++) {
+            for (var j = i + 1; j < allTables.length; j++) {
+                var a = cardPositions[allTables[i]];
+                var b = cardPositions[allTables[j]];
+                var overlapX = (a.x < b.x + b.w + 30) && (a.x + a.w + 30 > b.x);
+                var overlapY = (a.y < b.y + b.h + 20) && (a.y + a.h + 20 > b.y);
+                if (overlapX && overlapY) {
+                    // Push b to the right or down
+                    var pushRight = (a.x + a.w + CARD_GAP_X) - b.x;
+                    var pushDown = (a.y + a.h + CARD_GAP_Y) - b.y;
+                    if (pushRight < pushDown) {
+                        b.x += pushRight;
+                    } else {
+                        b.y += pushDown;
+                    }
+                    moved = true;
+                }
+            }
+        }
+        if (!moved) break;
+    }
+}
+
+// ── Render Cards ────────────────────────────────
+function renderCards() {
+    // Remove old cards
+    canvas.querySelectorAll('.table-card').forEach(el => el.remove());
+
+    tables.forEach(t => {
+        const pos = cardPositions[t];
+        if (!pos) return;
+        const cols = columns[t] || [];
+        const fkCols = new Set();
+        foreignKeys.forEach(fk => {
+            if (fk.fromTable === t) fkCols.add(fk.fromColumn);
+        });
+        const pkCols = new Set();
+        cols.forEach(c => { if (c.isPrimaryKey) pkCols.add(c.name); });
+
+        const card = document.createElement('div');
+        card.className = 'table-card';
+        card.dataset.table = t;
+        card.style.left = pos.x + 'px';
+        card.style.top = pos.y + 'px';
+        card.style.width = pos.w + 'px';
+
+        // Header
+        card.innerHTML = '<div class="card-header" title="' + esc(t) + '">' + esc(t) + '</div>';
+
+        // Body
+        const body = document.createElement('div');
+        body.className = 'card-body';
+
+        const visibleCount = Math.min(cols.length, COLLAPSE_THRESHOLD);
+        const collapsed = cols.length > COLLAPSE_THRESHOLD;
+
+        for (let i = 0; i < (collapsed ? visibleCount : cols.length); i++) {
+            const c = cols[i];
+            const isPk = pkCols.has(c.name);
+            const isFk = fkCols.has(c.name);
+            const iconClass = isPk ? 'pk' : isFk ? 'fk' : 'normal';
+            const icon = isPk ? '&#128273;' : isFk ? '&#128279;' : '&#9702;';
+            const nameClass = c.nullable ? 'col-name nullable' : 'col-name';
+
+            const row = document.createElement('div');
+            row.className = 'col-row';
+            row.dataset.column = c.name;
+            row.innerHTML = '<span class="col-icon ' + iconClass + '">' + icon + '</span>'
+                + '<span class="' + nameClass + '" title="' + esc(c.name) + '">' + esc(c.name) + '</span>'
+                + '<span class="col-type">' + esc(c.type) + '</span>';
+            body.appendChild(row);
+        }
+
+        if (collapsed) {
+            const expander = document.createElement('div');
+            expander.className = 'col-expand';
+            expander.textContent = '... +' + (cols.length - visibleCount) + ' more';
+            expander.addEventListener('click', function(e) {
+                e.stopPropagation();
+                // Expand: render all columns
+                body.innerHTML = '';
+                for (let i = 0; i < cols.length; i++) {
+                    const c = cols[i];
+                    const isPk2 = pkCols.has(c.name);
+                    const isFk2 = fkCols.has(c.name);
+                    const ic = isPk2 ? 'pk' : isFk2 ? 'fk' : 'normal';
+                    const icn = isPk2 ? '&#128273;' : isFk2 ? '&#128279;' : '&#9702;';
+                    const nc = c.nullable ? 'col-name nullable' : 'col-name';
+                    const r = document.createElement('div');
+                    r.className = 'col-row';
+                    r.dataset.column = c.name;
+                    r.innerHTML = '<span class="col-icon ' + ic + '">' + icn + '</span>'
+                        + '<span class="' + nc + '" title="' + esc(c.name) + '">' + esc(c.name) + '</span>'
+                        + '<span class="col-type">' + esc(c.type) + '</span>';
+                    body.appendChild(r);
+                }
+                // Update card height
+                setTimeout(function() {
+                    pos.h = card.offsetHeight;
+                    renderLines();
+                    updateMinimap();
+                }, 10);
+            });
+            body.appendChild(expander);
+        }
+
+        card.appendChild(body);
+        canvas.appendChild(card);
+
+        // Measure actual height
+        pos.h = card.offsetHeight;
+    });
+}
+
+// ── Render SVG Lines ────────────────────────────
+function renderLines() {
+    erdSvg.innerHTML = '';
+
+    // Size SVG to cover all cards
+    let maxX = 0, maxY = 0;
+    Object.values(cardPositions).forEach(p => {
+        maxX = Math.max(maxX, p.x + p.w + 200);
+        maxY = Math.max(maxY, p.y + p.h + 200);
+    });
+    erdSvg.setAttribute('width', maxX);
+    erdSvg.setAttribute('height', maxY);
+
+    // Group FKs between same table pairs to offset
+    const pairCount = {};
+
+    foreignKeys.forEach(fk => {
+        const from = cardPositions[fk.fromTable];
+        const to = cardPositions[fk.toTable];
+        if (!from || !to) return;
+
+        const pairKey = [fk.fromTable, fk.toTable].sort().join('::');
+        pairCount[pairKey] = (pairCount[pairKey] || 0) + 1;
+        const offset = (pairCount[pairKey] - 1) * 12;
+
+        // Self-referencing
+        if (fk.fromTable === fk.toTable) {
+            const cx = from.x + from.w;
+            const cy = from.y + from.h / 3 + offset;
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', `M ${cx} ${cy} C ${cx + 50} ${cy - 30}, ${cx + 50} ${cy + 50}, ${cx} ${cy + 30}`);
+            path.dataset.from = fk.fromTable;
+            path.dataset.to = fk.toTable;
+            erdSvg.appendChild(path);
+            return;
+        }
+
+        // Calculate connection points
+        let x1, y1, x2, y2;
+
+        // Determine which side to connect from
+        const fromCenterX = from.x + from.w / 2;
+        const toCenterX = to.x + to.w / 2;
+
+        if (fromCenterX < toCenterX) {
+            // From is left of To
+            x1 = from.x + from.w;
+            x2 = to.x;
+        } else {
+            // From is right of To
+            x1 = from.x;
+            x2 = to.x + to.w;
+        }
+        y1 = from.y + Math.min(from.h / 2, 35 + 12) + offset;
+        y2 = to.y + Math.min(to.h / 2, 35 + 12) + offset;
+
+        // Bezier curve
+        const dx = Math.abs(x2 - x1) * 0.5;
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', `M ${x1} ${y1} C ${x1 + (x2 > x1 ? dx : -dx)} ${y1}, ${x2 + (x2 > x1 ? -dx : dx)} ${y2}, ${x2} ${y2}`);
+        path.dataset.from = fk.fromTable;
+        path.dataset.to = fk.toTable;
+
+        // Hover events on line
+        path.style.pointerEvents = 'stroke';
+        path.style.cursor = 'pointer';
+
+        erdSvg.appendChild(path);
+
+        // Cardinality labels
+        const lbl1 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        lbl1.setAttribute('x', x1 + (x2 > x1 ? 8 : -8));
+        lbl1.setAttribute('y', y1 - 6);
+        lbl1.setAttribute('text-anchor', x2 > x1 ? 'start' : 'end');
+        lbl1.textContent = '1';
+        erdSvg.appendChild(lbl1);
+
+        const lbl2 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        lbl2.setAttribute('x', x2 + (x2 > x1 ? -8 : 8));
+        lbl2.setAttribute('y', y2 - 6);
+        lbl2.setAttribute('text-anchor', x2 > x1 ? 'end' : 'start');
+        lbl2.textContent = '\u221E';
+        erdSvg.appendChild(lbl2);
+
+        // Arrow at target
+        const arrowSize = 6;
+        const arrowDir = x2 > x1 ? -1 : 1;
+        const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        arrow.setAttribute('d', `M ${x2} ${y2} L ${x2 + arrowDir * arrowSize} ${y2 - arrowSize} L ${x2 + arrowDir * arrowSize} ${y2 + arrowSize} Z`);
+        arrow.setAttribute('fill', 'var(--vscode-editorLineNumber-foreground, #555)');
+        arrow.classList.add('arrow');
+        arrow.dataset.from = fk.fromTable;
+        arrow.dataset.to = fk.toTable;
+        erdSvg.appendChild(arrow);
+    });
+}
+
+// ── Drag Cards ──────────────────────────────────
+let dragCard = null, dragOffsetX = 0, dragOffsetY = 0;
+
+canvas.addEventListener('mousedown', function(e) {
+    const card = e.target.closest('.table-card');
+    if (!card) return;
+    if (e.target.closest('.col-expand')) return;
+
+    const t = card.dataset.table;
+    dragCard = { el: card, table: t };
+    const pos = cardPositions[t];
+    dragOffsetX = (e.clientX / zoom) - pos.x;
+    dragOffsetY = (e.clientY / zoom) - pos.y;
+    canvasArea.classList.add('dragging-card');
+
+    // Select table
+    selectTable(t);
+    e.stopPropagation();
+});
+
+document.addEventListener('mousemove', function(e) {
+    if (!dragCard) return;
+    const pos = cardPositions[dragCard.table];
+    pos.x = (e.clientX / zoom) - dragOffsetX - panX / zoom;
+    pos.y = (e.clientY / zoom) - dragOffsetY - panY / zoom;
+    dragCard.el.style.left = pos.x + 'px';
+    dragCard.el.style.top = pos.y + 'px';
+    renderLines();
+    updateMinimap();
+});
+
+document.addEventListener('mouseup', function() {
+    if (dragCard) {
+        dragCard = null;
+        canvasArea.classList.remove('dragging-card');
+    }
+});
+
+// ── Pan ─────────────────────────────────────────
+let isPanning = false, panStartX = 0, panStartY = 0, panStartPanX = 0, panStartPanY = 0;
+
+canvasArea.addEventListener('mousedown', function(e) {
+    if (e.target.closest('.table-card') || e.target.closest('.minimap')) return;
+    isPanning = true;
+    panStartX = e.clientX;
+    panStartY = e.clientY;
+    panStartPanX = panX;
+    panStartPanY = panY;
+    canvasArea.classList.add('panning');
+});
+
+document.addEventListener('mousemove', function(e) {
+    if (!isPanning) return;
+    panX = panStartPanX + (e.clientX - panStartX);
+    panY = panStartPanY + (e.clientY - panStartY);
+    applyTransform();
+    updateMinimap();
+});
+
+document.addEventListener('mouseup', function() {
+    if (isPanning) {
+        isPanning = false;
+        canvasArea.classList.remove('panning');
+    }
+});
+
+// ── Zoom ────────────────────────────────────────
+canvasArea.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.08 : 0.08;
+    const newZoom = Math.max(0.25, Math.min(2, zoom + delta));
+    // Zoom toward mouse position
+    const rect = canvasArea.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    panX = mx - (mx - panX) * (newZoom / zoom);
+    panY = my - (my - panY) * (newZoom / zoom);
+    zoom = newZoom;
+    applyTransform();
+    updateMinimap();
+}, { passive: false });
+
+function applyTransform() {
+    canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    zoomLabel.textContent = Math.round(zoom * 100) + '%';
+}
+
+// ── Select / Highlight Table ────────────────────
+function highlightTable(tableName) {
+    if (!tableName) {
+        // Clear all highlights
+        canvas.querySelectorAll('.table-card').forEach(function(el) {
+            el.classList.remove('dimmed');
+        });
+        erdSvg.querySelectorAll('path, .arrow, text').forEach(function(el) {
+            el.classList.remove('highlight');
+        });
+        return;
+    }
+
+    // Find related tables
+    var relatedTables = new Set([tableName]);
+    foreignKeys.forEach(function(fk) {
+        if (fk.fromTable === tableName) relatedTables.add(fk.toTable);
+        if (fk.toTable === tableName) relatedTables.add(fk.fromTable);
+    });
+
+    // Dim unrelated cards
+    canvas.querySelectorAll('.table-card').forEach(function(el) {
+        el.classList.toggle('dimmed', !relatedTables.has(el.dataset.table));
+    });
+
+    // Highlight related lines, dim others
+    erdSvg.querySelectorAll('path, .arrow').forEach(function(el) {
+        var isRelated = el.dataset.from === tableName || el.dataset.to === tableName;
+        el.classList.toggle('highlight', isRelated);
+    });
+    erdSvg.querySelectorAll('text').forEach(function(el) {
+        if (el.dataset && (el.dataset.from || el.dataset.to)) {
+            var isRelated = el.dataset.from === tableName || el.dataset.to === tableName;
+            el.classList.toggle('highlight', isRelated);
+        }
+    });
+}
+
+function selectTable(tableName) {
+    selectedTable = tableName;
+    canvas.querySelectorAll('.table-card').forEach(function(el) {
+        el.classList.toggle('selected', el.dataset.table === tableName);
+    });
+    highlightTable(tableName);
+}
+
+// Hover to highlight
+canvas.addEventListener('mouseover', function(e) {
+    var card = e.target.closest('.table-card');
+    if (card && !dragCard) {
+        highlightTable(card.dataset.table);
+    }
+});
+canvas.addEventListener('mouseout', function(e) {
+    var card = e.target.closest('.table-card');
+    if (card && !dragCard) {
+        // If we have a selected table, keep its highlights
+        if (selectedTable) {
+            highlightTable(selectedTable);
+        } else {
+            highlightTable(null);
+        }
+    }
+});
+
+// Click empty space to deselect
+canvasArea.addEventListener('click', function(e) {
+    if (!e.target.closest('.table-card') && !e.target.closest('.minimap')) {
+        selectedTable = null;
+        canvas.querySelectorAll('.table-card').forEach(function(el) { el.classList.remove('selected'); });
+        highlightTable(null);
+    }
+});
+
+// Double click to open table
+canvas.addEventListener('dblclick', function(e) {
+    const card = e.target.closest('.table-card');
+    if (!card) return;
+    vscode.postMessage({ type: 'openTable', table: card.dataset.table });
+});
+
+// ── Search ──────────────────────────────────────
+searchInput.addEventListener('input', function() {
+    const q = searchInput.value.trim().toLowerCase();
+    canvas.querySelectorAll('.table-card').forEach(el => {
+        el.classList.toggle('search-match', q && el.dataset.table.toLowerCase().includes(q));
+    });
+    // Focus on first match
+    if (q) {
+        const match = tables.find(t => t.toLowerCase().includes(q));
+        if (match && cardPositions[match]) {
+            const pos = cardPositions[match];
+            const rect = canvasArea.getBoundingClientRect();
+            panX = rect.width / 2 - (pos.x + pos.w / 2) * zoom;
+            panY = rect.height / 2 - (pos.y + pos.h / 2) * zoom;
+            applyTransform();
+            updateMinimap();
+        }
+    }
+});
+
+// ── Fit All ─────────────────────────────────────
+function fitAll() {
+    if (tables.length === 0) return;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    Object.values(cardPositions).forEach(p => {
+        minX = Math.min(minX, p.x);
+        minY = Math.min(minY, p.y);
+        maxX = Math.max(maxX, p.x + p.w);
+        maxY = Math.max(maxY, p.y + p.h);
+    });
+
+    const rect = canvasArea.getBoundingClientRect();
+    const contentW = maxX - minX + 80;
+    const contentH = maxY - minY + 80;
+    zoom = Math.min(rect.width / contentW, rect.height / contentH, 1.5);
+    zoom = Math.max(0.15, Math.min(2, zoom));
+    panX = (rect.width - contentW * zoom) / 2 - minX * zoom + 40;
+    panY = (rect.height - contentH * zoom) / 2 - minY * zoom + 40;
+    applyTransform();
+    updateMinimap();
+}
+
+// ── Minimap ─────────────────────────────────────
+function updateMinimap() {
+    if (tables.length === 0) return;
+    const mc = minimapCanvas;
+    const ctx = mc.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    mc.width = 160 * dpr;
+    mc.height = 110 * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, 160, 110);
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    Object.values(cardPositions).forEach(p => {
+        minX = Math.min(minX, p.x);
+        minY = Math.min(minY, p.y);
+        maxX = Math.max(maxX, p.x + p.w);
+        maxY = Math.max(maxY, p.y + p.h);
+    });
+
+    const pad = 20;
+    const contentW = maxX - minX + pad * 2;
+    const contentH = maxY - minY + pad * 2;
+    const scale = Math.min(160 / contentW, 110 / contentH);
+
+    // Draw cards as rectangles
+    ctx.fillStyle = 'rgba(79,193,255,0.3)';
+    ctx.strokeStyle = 'rgba(79,193,255,0.6)';
+    Object.values(cardPositions).forEach(p => {
+        const x = (p.x - minX + pad) * scale;
+        const y = (p.y - minY + pad) * scale;
+        const w = p.w * scale;
+        const h = p.h * scale;
+        ctx.fillRect(x, y, w, h);
+        ctx.strokeRect(x, y, w, h);
+    });
+
+    // Draw lines
+    ctx.strokeStyle = 'rgba(128,128,128,0.4)';
+    ctx.lineWidth = 0.5;
+    foreignKeys.forEach(fk => {
+        const from = cardPositions[fk.fromTable];
+        const to = cardPositions[fk.toTable];
+        if (!from || !to) return;
+        ctx.beginPath();
+        ctx.moveTo((from.x + from.w / 2 - minX + pad) * scale, (from.y + from.h / 2 - minY + pad) * scale);
+        ctx.lineTo((to.x + to.w / 2 - minX + pad) * scale, (to.y + to.h / 2 - minY + pad) * scale);
+        ctx.stroke();
+    });
+
+    // Viewport indicator
+    const rect = canvasArea.getBoundingClientRect();
+    const vx = (-panX / zoom - minX + pad) * scale;
+    const vy = (-panY / zoom - minY + pad) * scale;
+    const vw = (rect.width / zoom) * scale;
+    const vh = (rect.height / zoom) * scale;
+    minimapViewport.style.left = Math.max(0, vx) + 'px';
+    minimapViewport.style.top = Math.max(0, vy) + 'px';
+    minimapViewport.style.width = Math.min(160, vw) + 'px';
+    minimapViewport.style.height = Math.min(110, vh) + 'px';
+}
+
+// ── Minimap Navigation ──────────────────────────
+var minimapDragging = false;
+
+function minimapNavigate(e) {
+    if (tables.length === 0) return;
+    var mmRect = document.getElementById('minimap').getBoundingClientRect();
+    var clickX = e.clientX - mmRect.left;
+    var clickY = e.clientY - mmRect.top;
+
+    // Calculate the same scale/bounds as updateMinimap
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    Object.values(cardPositions).forEach(function(p) {
+        minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+        maxX = Math.max(maxX, p.x + p.w); maxY = Math.max(maxY, p.y + p.h);
+    });
+    var pad = 20;
+    var contentW = maxX - minX + pad * 2;
+    var contentH = maxY - minY + pad * 2;
+    var scale = Math.min(160 / contentW, 110 / contentH);
+
+    // Convert minimap click to canvas coordinates
+    var canvasX = clickX / scale + minX - pad;
+    var canvasY = clickY / scale + minY - pad;
+
+    // Center the viewport on that point
+    var rect = canvasArea.getBoundingClientRect();
+    panX = -(canvasX * zoom) + rect.width / 2;
+    panY = -(canvasY * zoom) + rect.height / 2;
+    applyTransform();
+    updateMinimap();
+}
+
+document.getElementById('minimap').addEventListener('mousedown', function(e) {
+    e.stopPropagation();
+    minimapDragging = true;
+    minimapNavigate(e);
+});
+
+document.addEventListener('mousemove', function(e) {
+    if (minimapDragging) {
+        minimapNavigate(e);
+    }
+});
+
+document.addEventListener('mouseup', function() {
+    minimapDragging = false;
+});
+
+// ── Export ───────────────────────────────────────
+function exportPng() {
+    const cvs = document.createElement('canvas');
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    Object.values(cardPositions).forEach(p => {
+        minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+        maxX = Math.max(maxX, p.x + p.w); maxY = Math.max(maxY, p.y + p.h);
+    });
+    const pad = 40;
+    const w = maxX - minX + pad * 2;
+    const h = maxY - minY + pad * 2;
+    cvs.width = w * 2; cvs.height = h * 2;
+    const ctx = cvs.getContext('2d');
+    ctx.scale(2, 2);
+    ctx.fillStyle = getComputedStyle(document.body).backgroundColor || '#1e1e1e';
+    ctx.fillRect(0, 0, w, h);
+
+    // Draw cards
+    Object.keys(cardPositions).forEach(t => {
+        const p = cardPositions[t];
+        const cols = columns[t] || [];
+        const x = p.x - minX + pad;
+        const y = p.y - minY + pad;
+        // Card bg
+        ctx.fillStyle = '#2d2d2d';
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(x, y, p.w, p.h, 6);
+        ctx.fill(); ctx.stroke();
+        // Header
+        ctx.fillStyle = '#333';
+        ctx.fillRect(x, y, p.w, 32);
+        ctx.fillStyle = '#4fc1ff';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.fillText(t, x + 10, y + 21);
+        // Columns
+        ctx.font = '11px monospace';
+        const visCount = Math.min(cols.length, COLLAPSE_THRESHOLD);
+        for (let i = 0; i < visCount; i++) {
+            const c = cols[i];
+            const cy = y + 35 + i * 22 + 14;
+            ctx.fillStyle = c.isPrimaryKey ? '#ee9d28' : '#ccc';
+            ctx.fillText((c.isPrimaryKey ? '🔑 ' : '  ') + c.name, x + 10, cy);
+            ctx.fillStyle = '#888';
+            ctx.fillText(c.type, x + p.w - ctx.measureText(c.type).width - 10, cy);
+        }
+    });
+
+    // Draw lines
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 1.5;
+    foreignKeys.forEach(fk => {
+        const from = cardPositions[fk.fromTable];
+        const to = cardPositions[fk.toTable];
+        if (!from || !to) return;
+        const x1 = from.x + from.w - minX + pad;
+        const y1 = from.y + from.h / 2 - minY + pad;
+        const x2 = to.x - minX + pad;
+        const y2 = to.y + to.h / 2 - minY + pad;
+        const dx = Math.abs(x2 - x1) * 0.4;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.bezierCurveTo(x1 + dx, y1, x2 - dx, y2, x2, y2);
+        ctx.stroke();
+    });
+
+    vscode.postMessage({ type: 'exportPng', data: cvs.toDataURL('image/png') });
+}
+
+function exportSvg() {
+    // Clone SVG and add card representations
+    let svgContent = '<svg xmlns="http://www.w3.org/2000/svg" width="4000" height="3000">';
+    svgContent += '<rect width="100%" height="100%" fill="#1e1e1e"/>';
+
+    // Cards as rects
+    Object.keys(cardPositions).forEach(t => {
+        const p = cardPositions[t];
+        svgContent += '<rect x="' + p.x + '" y="' + p.y + '" width="' + p.w + '" height="' + p.h + '" rx="6" fill="#2d2d2d" stroke="#555" stroke-width="1"/>';
+        svgContent += '<text x="' + (p.x + 10) + '" y="' + (p.y + 22) + '" fill="#4fc1ff" font-weight="bold" font-size="12" font-family="sans-serif">' + esc(t) + '</text>';
+    });
+
+    // Lines
+    svgContent += erdSvg.innerHTML;
+    svgContent += '</svg>';
+    vscode.postMessage({ type: 'exportSvg', data: svgContent });
+}
+
+// ── Toolbar Events ──────────────────────────────
+document.getElementById('btnZoomIn').addEventListener('click', function() {
+    zoom = Math.min(2, zoom + 0.15);
+    applyTransform(); updateMinimap();
+});
+document.getElementById('btnZoomOut').addEventListener('click', function() {
+    zoom = Math.max(0.25, zoom - 0.15);
+    applyTransform(); updateMinimap();
+});
+document.getElementById('btnFitAll').addEventListener('click', fitAll);
+document.getElementById('btnRelayout').addEventListener('click', function() {
+    cardPositions = {};
+    computeLayout(); renderCards(); renderLines();
+    setTimeout(fitAll, 50);
+});
+document.getElementById('btnRefresh').addEventListener('click', function() {
+    vscode.postMessage({ type: 'refresh' });
+});
+document.getElementById('btnExportPng').addEventListener('click', exportPng);
+document.getElementById('btnExportSvg').addEventListener('click', exportSvg);
+
+// ── Full Render ─────────────────────────────────
+function renderAll() {
+    if (tables.length === 0) {
+        loadingState.classList.add('hidden');
+        emptyState.classList.remove('hidden');
+        canvasArea.classList.add('hidden');
+        statsBar.classList.add('hidden');
+        return;
+    }
+
+    loadingState.classList.add('hidden');
+    errorState.classList.add('hidden');
+    emptyState.classList.add('hidden');
+    canvasArea.classList.remove('hidden');
+    statsBar.classList.remove('hidden');
+
+    computeLayout();
+    renderCards();
+    renderLines();
+
+    // Stats
+    let totalCols = 0;
+    tables.forEach(t => { totalCols += (columns[t] || []).length; });
+    document.getElementById('statTables').textContent = 'Tables: ' + tables.length;
+    document.getElementById('statRelations').textContent = 'Relations: ' + foreignKeys.length;
+    document.getElementById('statColumns').textContent = 'Columns: ' + totalCols;
+
+    setTimeout(function() {
+        fitAll();
+        updateMinimap();
+    }, 100);
+}
+
+// ── Messages ────────────────────────────────────
+window.addEventListener('message', function(event) {
+    var msg = event.data;
+    if (!msg || !msg.type) return;
+
+    switch (msg.type) {
+        case 'loading':
+            loadingState.classList.remove('hidden');
+            errorState.classList.add('hidden');
+            emptyState.classList.add('hidden');
+            canvasArea.classList.add('hidden');
+            statsBar.classList.add('hidden');
+            break;
+
+        case 'schema':
+            tables = msg.tables || [];
+            columns = msg.columns || {};
+            foreignKeys = msg.foreignKeys || [];
+            if (msg.connName) document.getElementById('erdTitle').textContent = 'ER Diagram: ' + msg.connName;
+            // Convert ColumnInfo objects properly
+            Object.keys(columns).forEach(function(t) {
+                columns[t] = (columns[t] || []).map(function(c) {
+                    return {
+                        name: c.name || '',
+                        type: c.type || '',
+                        nullable: !!c.nullable,
+                        isPrimaryKey: !!c.isPrimaryKey,
+                        defaultValue: c.defaultValue || null
+                    };
+                });
+            });
+            renderAll();
+            break;
+
+        case 'error':
+            loadingState.classList.add('hidden');
+            canvasArea.classList.add('hidden');
+            statsBar.classList.add('hidden');
+            document.getElementById('errorMsg').textContent = msg.message || 'Unknown error';
+            errorState.classList.remove('hidden');
+            break;
+    }
+});
+
+// ── Init ────────────────────────────────────────
+vscode.postMessage({ type: 'ready' });
+</script>
+</body>
+</html>

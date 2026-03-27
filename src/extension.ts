@@ -5,6 +5,7 @@ import { TableViewPanel } from './webviews/TableViewPanel';
 import { QueryResultPanel } from './webviews/QueryResultPanel';
 import { ConnectionFormPanel } from './webviews/ConnectionFormPanel';
 import { QueryEditorPanel } from './webviews/QueryEditorPanel';
+import { ERDPanel } from './webviews/ERDPanel';
 
 let connectionManager: ConnectionManager;
 let connectionProvider: ConnectionProvider;
@@ -70,6 +71,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('dblens.exportCSV', () => exportCSV(context)),
     vscode.commands.registerCommand('dblens.copyTableName', (item: ConnectionTreeItem) => copyTableName(item)),
     vscode.commands.registerCommand('dblens.openQueryEditor', () => openQueryEditor(context)),
+    vscode.commands.registerCommand('dblens.showERD', (item: ConnectionTreeItem) => showERD(context, item)),
   );
 }
 
@@ -239,6 +241,33 @@ async function copyTableName(item: ConnectionTreeItem): Promise<void> {
     await vscode.env.clipboard.writeText(item.tableName);
     vscode.window.showInformationMessage(`Copied "${item.tableName}" to clipboard.`);
   }
+}
+
+// ─── Show ERD ──────────────────────────────────────────────────────
+
+async function showERD(context: vscode.ExtensionContext, item?: ConnectionTreeItem): Promise<void> {
+  let connId: string | undefined;
+
+  if (item?.connectionId) {
+    connId = item.connectionId;
+  } else {
+    connId = await pickConnection();
+  }
+
+  if (!connId) { return; }
+
+  if (!connectionManager.isConnected(connId)) {
+    try {
+      await connectionManager.connect(connId);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      vscode.window.showErrorMessage(`Cannot connect: ${message}`);
+      return;
+    }
+  }
+
+  const conn = connectionManager.getConnection(connId);
+  ERDPanel.show(connectionManager, connId, conn?.name || 'Database', context.extensionUri);
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────

@@ -153,6 +153,12 @@
         "title": "Open Query Editor",
         "category": "DBLens",
         "icon": "$(terminal)"
+      },
+      {
+        "command": "dblens.showERD",
+        "title": "Show ER Diagram",
+        "category": "DBLens",
+        "icon": "$(type-hierarchy)"
       }
     ],
     "menus": {
@@ -198,6 +204,11 @@
           "command": "dblens.removeConnection",
           "when": "view == dblens-connections && viewItem =~ /^connection/",
           "group": "1_connection@2"
+        },
+        {
+          "command": "dblens.showERD",
+          "when": "view == dblens-connections && viewItem =~ /^connection-connected/",
+          "group": "2_tools@1"
         },
 {
           "command": "dblens.viewTable",

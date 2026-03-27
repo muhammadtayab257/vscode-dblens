@@ -79,28 +79,29 @@
             fill: none;
             stroke: var(--vscode-editorLineNumber-foreground, #444);
             stroke-width: 1;
-            opacity: 0.3;
-            transition: stroke 0.15s, stroke-width 0.15s, opacity 0.15s;
+            opacity: 0;
             pointer-events: stroke;
         }
+        .erd-svg.show-lines path { opacity: 0.2; }
         .erd-svg path.highlight {
             stroke: var(--vscode-textLink-foreground, #4fc1ff);
-            stroke-width: 2.5;
-            opacity: 1;
+            stroke-width: 2;
+            opacity: 1 !important;
         }
-        .erd-svg .arrow { opacity: 0.3; transition: opacity 0.15s; }
-        .erd-svg .arrow.highlight { opacity: 1; fill: var(--vscode-textLink-foreground, #4fc1ff); }
+        .erd-svg .arrow { opacity: 0; }
+        .erd-svg.show-lines .arrow { opacity: 0.2; }
+        .erd-svg .arrow.highlight { opacity: 1 !important; fill: var(--vscode-textLink-foreground, #4fc1ff); }
         .erd-svg text {
             font-family: var(--vscode-font-family, sans-serif);
             font-size: 10px;
             fill: var(--vscode-descriptionForeground, #888);
             opacity: 0;
-            transition: opacity 0.15s;
         }
         .erd-svg text.highlight { opacity: 1; fill: var(--vscode-textLink-foreground, #4fc1ff); }
 
-        /* When a table is hovered, dim non-related cards */
-        .table-card.dimmed { opacity: 0.3; transition: opacity 0.15s; }
+        .table-card.dimmed { opacity: 0.25; }
+
+        .tb.active { background: var(--vscode-textLink-foreground, #4fc1ff); color: #000; }
 
         /* ── Table Cards ─────────────────────────────── */
         .table-card {
@@ -157,6 +158,33 @@
         }
         .col-expand:hover { background: var(--vscode-list-hoverBackground); }
 
+        /* ── Related Tables Bar ──────────────────────── */
+        .related-bar {
+            display: none;
+            flex-wrap: wrap;
+            gap: 4px;
+            padding: 6px 10px;
+            border-top: 1px solid var(--vscode-widget-border, #444);
+            background: rgba(79,193,255,0.06);
+        }
+        .related-bar.active { display: flex; }
+        .related-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 2px 8px;
+            font-size: 10px;
+            font-weight: 600;
+            background: rgba(79,193,255,0.15);
+            color: var(--vscode-textLink-foreground, #4fc1ff);
+            border-radius: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .related-tag:hover {
+            background: rgba(79,193,255,0.3);
+        }
+
         /* ── Minimap ─────────────────────────────────── */
         .minimap {
             position: absolute; bottom: 12px; right: 12px;
@@ -209,6 +237,7 @@
         <button class="tb" id="btnZoomIn" title="Zoom in">+</button>
         <button class="tb" id="btnFitAll" title="Fit all tables in view">Fit All</button>
         <div class="separator"></div>
+        <button class="tb" id="btnToggleLines" title="Show/hide all relationship lines">Lines</button>
         <button class="tb" id="btnRelayout" title="Re-run auto layout">Layout</button>
         <button class="tb" id="btnRefresh" title="Refresh schema">Refresh</button>
         <div class="separator"></div>
@@ -401,25 +430,17 @@ function computeLayout() {
         globalY += 30;
     });
 
-    // Collision resolution — 10 passes
+    // Quick collision resolution — 3 passes max
     var allTables = Object.keys(cardPositions);
-    for (var iter = 0; iter < 10; iter++) {
+    for (var iter = 0; iter < 3; iter++) {
         var moved = false;
         for (var i = 0; i < allTables.length; i++) {
             for (var j = i + 1; j < allTables.length; j++) {
                 var a = cardPositions[allTables[i]];
                 var b = cardPositions[allTables[j]];
-                var overlapX = (a.x < b.x + b.w + 30) && (a.x + a.w + 30 > b.x);
-                var overlapY = (a.y < b.y + b.h + 20) && (a.y + a.h + 20 > b.y);
-                if (overlapX && overlapY) {
-                    // Push b to the right or down
-                    var pushRight = (a.x + a.w + CARD_GAP_X) - b.x;
-                    var pushDown = (a.y + a.h + CARD_GAP_Y) - b.y;
-                    if (pushRight < pushDown) {
-                        b.x += pushRight;
-                    } else {
-                        b.y += pushDown;
-                    }
+                if (a.x < b.x + b.w + 20 && a.x + a.w + 20 > b.x &&
+                    a.y < b.y + b.h + 10 && a.y + a.h + 10 > b.y) {
+                    b.x = a.x + a.w + CARD_GAP_X;
                     moved = true;
                 }
             }
@@ -505,6 +526,7 @@ function renderCards() {
                 setTimeout(function() {
                     pos.h = card.offsetHeight;
                     renderLines();
+                    if (selectedTable) highlightTable(selectedTable);
                     updateMinimap();
                 }, 10);
             });
@@ -550,8 +572,8 @@ function renderLines() {
             const cy = from.y + from.h / 3 + offset;
             const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             path.setAttribute('d', `M ${cx} ${cy} C ${cx + 50} ${cy - 30}, ${cx + 50} ${cy + 50}, ${cx} ${cy + 30}`);
-            path.dataset.from = fk.fromTable;
-            path.dataset.to = fk.toTable;
+            path.setAttribute('data-from', fk.fromTable);
+            path.setAttribute('data-to', fk.toTable);
             erdSvg.appendChild(path);
             return;
         }
@@ -579,8 +601,8 @@ function renderLines() {
         const dx = Math.abs(x2 - x1) * 0.5;
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         path.setAttribute('d', `M ${x1} ${y1} C ${x1 + (x2 > x1 ? dx : -dx)} ${y1}, ${x2 + (x2 > x1 ? -dx : dx)} ${y2}, ${x2} ${y2}`);
-        path.dataset.from = fk.fromTable;
-        path.dataset.to = fk.toTable;
+        path.setAttribute('data-from', fk.fromTable);
+        path.setAttribute('data-to', fk.toTable);
 
         // Hover events on line
         path.style.pointerEvents = 'stroke';
@@ -593,6 +615,8 @@ function renderLines() {
         lbl1.setAttribute('x', x1 + (x2 > x1 ? 8 : -8));
         lbl1.setAttribute('y', y1 - 6);
         lbl1.setAttribute('text-anchor', x2 > x1 ? 'start' : 'end');
+        lbl1.setAttribute('data-from', fk.fromTable);
+        lbl1.setAttribute('data-to', fk.toTable);
         lbl1.textContent = '1';
         erdSvg.appendChild(lbl1);
 
@@ -600,6 +624,8 @@ function renderLines() {
         lbl2.setAttribute('x', x2 + (x2 > x1 ? -8 : 8));
         lbl2.setAttribute('y', y2 - 6);
         lbl2.setAttribute('text-anchor', x2 > x1 ? 'end' : 'start');
+        lbl2.setAttribute('data-from', fk.fromTable);
+        lbl2.setAttribute('data-to', fk.toTable);
         lbl2.textContent = '\u221E';
         erdSvg.appendChild(lbl2);
 
@@ -610,46 +636,67 @@ function renderLines() {
         arrow.setAttribute('d', `M ${x2} ${y2} L ${x2 + arrowDir * arrowSize} ${y2 - arrowSize} L ${x2 + arrowDir * arrowSize} ${y2 + arrowSize} Z`);
         arrow.setAttribute('fill', 'var(--vscode-editorLineNumber-foreground, #555)');
         arrow.classList.add('arrow');
-        arrow.dataset.from = fk.fromTable;
-        arrow.dataset.to = fk.toTable;
+        arrow.setAttribute('data-from', fk.fromTable);
+        arrow.setAttribute('data-to', fk.toTable);
         erdSvg.appendChild(arrow);
     });
 }
 
 // ── Drag Cards ──────────────────────────────────
-let dragCard = null, dragOffsetX = 0, dragOffsetY = 0;
+var dragCard = null, dragOffsetX = 0, dragOffsetY = 0;
+var dragStartX = 0, dragStartY = 0, isDraggingCard = false;
+var DRAG_THRESHOLD = 5;
 
 canvas.addEventListener('mousedown', function(e) {
-    const card = e.target.closest('.table-card');
+    var card = e.target.closest('.table-card');
     if (!card) return;
     if (e.target.closest('.col-expand')) return;
 
-    const t = card.dataset.table;
+    var t = card.dataset.table;
+    var pos = cardPositions[t];
     dragCard = { el: card, table: t };
-    const pos = cardPositions[t];
-    dragOffsetX = (e.clientX / zoom) - pos.x;
-    dragOffsetY = (e.clientY / zoom) - pos.y;
-    canvasArea.classList.add('dragging-card');
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    dragOffsetX = (e.clientX / zoom) - pos.x - panX / zoom;
+    dragOffsetY = (e.clientY / zoom) - pos.y - panY / zoom;
+    isDraggingCard = false;
 
-    // Select table
     selectTable(t);
     e.stopPropagation();
 });
 
+var dragRafId = null;
 document.addEventListener('mousemove', function(e) {
     if (!dragCard) return;
-    const pos = cardPositions[dragCard.table];
+
+    // Check if we've moved enough to start dragging
+    if (!isDraggingCard) {
+        var dx = Math.abs(e.clientX - dragStartX);
+        var dy = Math.abs(e.clientY - dragStartY);
+        if (dx < DRAG_THRESHOLD && dy < DRAG_THRESHOLD) return;
+        isDraggingCard = true;
+        canvasArea.classList.add('dragging-card');
+    }
+
+    var pos = cardPositions[dragCard.table];
     pos.x = (e.clientX / zoom) - dragOffsetX - panX / zoom;
     pos.y = (e.clientY / zoom) - dragOffsetY - panY / zoom;
     dragCard.el.style.left = pos.x + 'px';
     dragCard.el.style.top = pos.y + 'px';
-    renderLines();
-    updateMinimap();
+    if (!dragRafId) {
+        dragRafId = requestAnimationFrame(function() {
+            renderLines();
+            if (selectedTable) highlightTable(selectedTable);
+            updateMinimap();
+            dragRafId = null;
+        });
+    }
 });
 
 document.addEventListener('mouseup', function() {
     if (dragCard) {
         dragCard = null;
+        isDraggingCard = false;
         canvasArea.classList.remove('dragging-card');
     }
 });
@@ -728,61 +775,130 @@ function highlightTable(tableName) {
         el.classList.toggle('dimmed', !relatedTables.has(el.dataset.table));
     });
 
-    // Highlight related lines, dim others
-    erdSvg.querySelectorAll('path, .arrow').forEach(function(el) {
-        var isRelated = el.dataset.from === tableName || el.dataset.to === tableName;
+    // Highlight related lines and arrows
+    erdSvg.querySelectorAll('[data-from], [data-to]').forEach(function(el) {
+        var isRelated = el.getAttribute('data-from') === tableName || el.getAttribute('data-to') === tableName;
         el.classList.toggle('highlight', isRelated);
-    });
-    erdSvg.querySelectorAll('text').forEach(function(el) {
-        if (el.dataset && (el.dataset.from || el.dataset.to)) {
-            var isRelated = el.dataset.from === tableName || el.dataset.to === tableName;
-            el.classList.toggle('highlight', isRelated);
-        }
     });
 }
 
 function selectTable(tableName) {
     selectedTable = tableName;
+
+    // Clear all related bars
+    canvas.querySelectorAll('.related-bar').forEach(function(el) {
+        el.classList.remove('active');
+        el.innerHTML = '';
+    });
+
     canvas.querySelectorAll('.table-card').forEach(function(el) {
         el.classList.toggle('selected', el.dataset.table === tableName);
     });
+
     highlightTable(tableName);
+
+    if (!tableName) return;
+
+    // Find related tables
+    var related = [];
+    foreignKeys.forEach(function(fk) {
+        if (fk.fromTable === tableName && fk.toTable !== tableName) {
+            related.push({ table: fk.toTable, col: fk.fromColumn, dir: '\u2192' });
+        }
+        if (fk.toTable === tableName && fk.fromTable !== tableName) {
+            related.push({ table: fk.fromTable, col: fk.toColumn, dir: '\u2190' });
+        }
+    });
+
+    // Remove duplicates
+    var seen = {};
+    related = related.filter(function(r) {
+        if (seen[r.table]) return false;
+        seen[r.table] = true;
+        return true;
+    });
+
+    if (related.length === 0) return;
+
+    // Add related tags to the selected card
+    var card = canvas.querySelector('.table-card[data-table="' + tableName + '"]');
+    if (!card) return;
+
+    var bar = card.querySelector('.related-bar');
+    if (!bar) {
+        bar = document.createElement('div');
+        bar.className = 'related-bar';
+        card.appendChild(bar);
+    }
+
+    bar.innerHTML = '';
+    related.forEach(function(r) {
+        var tag = document.createElement('span');
+        tag.className = 'related-tag';
+        tag.textContent = r.dir + ' ' + r.table;
+        tag.title = 'Click to jump to ' + r.table;
+        tag.addEventListener('click', function(e) {
+            e.stopPropagation();
+            jumpToTable(r.table);
+        });
+        bar.appendChild(tag);
+    });
+    bar.classList.add('active');
+
+    // Update card height in positions
+    var pos = cardPositions[tableName];
+    if (pos) {
+        setTimeout(function() {
+            pos.h = card.offsetHeight;
+            renderLines();
+            // Re-apply highlights after lines are re-rendered
+            if (selectedTable) highlightTable(selectedTable);
+        }, 10);
+    }
 }
 
-// Hover to highlight
+function jumpToTable(tableName) {
+    var pos = cardPositions[tableName];
+    if (!pos) return;
+
+    // Center viewport on the target table
+    var rect = canvasArea.getBoundingClientRect();
+    panX = rect.width / 2 - (pos.x + pos.w / 2) * zoom;
+    panY = rect.height / 2 - (pos.y + pos.h / 2) * zoom;
+    applyTransform();
+    updateMinimap();
+
+    // Select the target table
+    selectTable(tableName);
+}
+
+// Hover to highlight — only if no table is selected
 canvas.addEventListener('mouseover', function(e) {
+    if (selectedTable) return; // Don't override selection
     var card = e.target.closest('.table-card');
     if (card && !dragCard) {
         highlightTable(card.dataset.table);
     }
 });
 canvas.addEventListener('mouseout', function(e) {
+    if (selectedTable) return; // Don't override selection
     var card = e.target.closest('.table-card');
     if (card && !dragCard) {
-        // If we have a selected table, keep its highlights
-        if (selectedTable) {
-            highlightTable(selectedTable);
-        } else {
-            highlightTable(null);
-        }
-    }
-});
-
-// Click empty space to deselect
-canvasArea.addEventListener('click', function(e) {
-    if (!e.target.closest('.table-card') && !e.target.closest('.minimap')) {
-        selectedTable = null;
-        canvas.querySelectorAll('.table-card').forEach(function(el) { el.classList.remove('selected'); });
         highlightTable(null);
     }
 });
 
-// Double click to open table
-canvas.addEventListener('dblclick', function(e) {
-    const card = e.target.closest('.table-card');
-    if (!card) return;
-    vscode.postMessage({ type: 'openTable', table: card.dataset.table });
+// Double-click empty space to deselect
+canvasArea.addEventListener('dblclick', function(e) {
+    if (!e.target.closest('.table-card') && !e.target.closest('.minimap')) {
+        selectedTable = null;
+        canvas.querySelectorAll('.table-card').forEach(function(el) { el.classList.remove('selected'); });
+        canvas.querySelectorAll('.related-bar').forEach(function(el) { el.classList.remove('active'); el.innerHTML = ''; });
+        highlightTable(null);
+    }
 });
+
+
 
 // ── Search ──────────────────────────────────────
 searchInput.addEventListener('input', function() {
@@ -1033,9 +1149,16 @@ document.getElementById('btnZoomOut').addEventListener('click', function() {
     applyTransform(); updateMinimap();
 });
 document.getElementById('btnFitAll').addEventListener('click', fitAll);
+var linesVisible = false;
+document.getElementById('btnToggleLines').addEventListener('click', function() {
+    linesVisible = !linesVisible;
+    erdSvg.classList.toggle('show-lines', linesVisible);
+    this.classList.toggle('active', linesVisible);
+});
 document.getElementById('btnRelayout').addEventListener('click', function() {
-    cardPositions = {};
+    cardPositions = {}; selectedTable = null;
     computeLayout(); renderCards(); renderLines();
+    highlightTable(null);
     setTimeout(fitAll, 50);
 });
 document.getElementById('btnRefresh').addEventListener('click', function() {

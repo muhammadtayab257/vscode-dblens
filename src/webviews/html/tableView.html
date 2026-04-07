@@ -183,6 +183,18 @@
         .cell-number { color: var(--vscode-debugTokenExpression-number, #b5cea8); text-align: right; }
         .cell-boolean { color: var(--vscode-debugTokenExpression-boolean, #569cd6); }
 
+        .cell-fk {
+            color: var(--vscode-textLink-foreground, #4fc1ff);
+            cursor: pointer;
+            text-decoration: underline;
+            text-decoration-style: dotted;
+            text-underline-offset: 2px;
+        }
+        .cell-fk:hover {
+            text-decoration-style: solid;
+            background: rgba(79,193,255,0.1);
+        }
+
         table.data-grid th.row-num,
         table.data-grid td.row-num {
             color: var(--vscode-editorLineNumber-foreground, #555);
@@ -236,6 +248,80 @@
         }
 
         .page-ellipsis { color: var(--vscode-descriptionForeground); padding: 0 4px; font-size: 12px; user-select: none; }
+
+        /* ── Inline Editing ───────────────────────────── */
+        table.data-grid td.editable { cursor: text; }
+        table.data-grid td.editable:hover { background: rgba(79,193,255,0.06); }
+        table.data-grid td.editing {
+            padding: 0;
+            outline: 2px solid var(--vscode-focusBorder);
+            outline-offset: -2px;
+        }
+        table.data-grid td.editing input {
+            width: 100%;
+            padding: 6px 14px;
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: none;
+            outline: none;
+            font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
+            font-size: 12px;
+        }
+        table.data-grid td.cell-modified {
+            background: rgba(255,200,0,0.12) !important;
+            border-left: 2px solid #e2b714;
+        }
+        table.data-grid tr.row-new { background: rgba(34,165,89,0.1) !important; }
+        table.data-grid tr.row-new td { border-left: 2px solid #22a559; }
+        table.data-grid tr.row-deleted { opacity: 0.4; text-decoration: line-through; }
+        table.data-grid tr.row-deleted td { background: rgba(241,76,76,0.08) !important; }
+
+        table.data-grid th.check-col,
+        table.data-grid td.check-col {
+            width: 32px; min-width: 32px; max-width: 32px;
+            text-align: center;
+            padding: 4px;
+            cursor: pointer;
+        }
+        table.data-grid td.check-col input { cursor: pointer; accent-color: var(--vscode-focusBorder); }
+
+        /* ── Changes Bar ─────────────────────────────── */
+        .changes-bar {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 14px;
+            background: rgba(255,200,0,0.08);
+            border-top: 1px solid rgba(255,200,0,0.3);
+            border-bottom: 1px solid rgba(255,200,0,0.3);
+            flex-shrink: 0;
+            font-size: 12px;
+        }
+        .changes-bar.active { display: flex; }
+        .changes-bar .changes-count { color: var(--vscode-editor-foreground); font-weight: 600; }
+        .changes-bar .spacer { flex: 1; }
+        .changes-bar .btn-save {
+            padding: 5px 14px; border: none; border-radius: 5px; font-size: 12px; font-weight: 600;
+            font-family: inherit; cursor: pointer;
+            background: #22a559; color: #fff;
+        }
+        .changes-bar .btn-save:hover { background: #1d8f4c; }
+        .changes-bar .btn-discard {
+            padding: 5px 14px; border: 1px solid var(--vscode-widget-border, #555); border-radius: 5px;
+            font-size: 12px; font-family: inherit; cursor: pointer;
+            background: transparent; color: var(--vscode-editor-foreground);
+        }
+        .changes-bar .btn-discard:hover { background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.15)); }
+
+        .no-pk-msg {
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            padding: 4px 14px;
+            background: rgba(128,128,128,0.06);
+            border-bottom: 1px solid var(--vscode-widget-border, #333);
+            flex-shrink: 0;
+        }
+        .no-pk-msg.hidden { display: none; }
 
         /* ── Status Bar ───────────────────────────────── */
         .status-bar {
@@ -324,8 +410,21 @@
                 <input type="text" class="search-input" id="searchInput" placeholder="Filter rows... (WHERE clause)" spellcheck="false" autocomplete="off">
             </div>
             <div class="spacer"></div>
+            <button class="btn btn-secondary" id="addRowBtn" title="Insert new row" style="background:#22a559;color:#fff;border:none;">+ Add Row</button>
+            <button class="btn btn-secondary" id="deleteRowsBtn" title="Delete selected rows" disabled style="background:transparent;color:var(--vscode-errorForeground,#f14c4c);border:1px solid var(--vscode-errorForeground,#f14c4c);">Delete Selected</button>
+            <div style="width:1px;height:20px;background:var(--vscode-widget-border,#444);margin:0 4px;"></div>
             <button class="btn btn-secondary" id="refreshBtn" title="Refresh data">&#8635; Refresh</button>
             <button class="btn btn-primary" id="exportBtn" title="Export to CSV">&#8615; Export CSV</button>
+        </div>
+
+        <div class="no-pk-msg hidden" id="noPkMsg">&#9888; This table has no primary key — editing is disabled. Add a primary key to enable inline editing.</div>
+
+        <!-- Changes Bar -->
+        <div class="changes-bar" id="changesBar">
+            <span class="changes-count" id="changesCount">0 pending changes</span>
+            <span class="spacer"></span>
+            <button class="btn-discard" id="discardBtn">Discard</button>
+            <button class="btn-save" id="saveBtn">Save Changes</button>
         </div>
 
         <div class="error-banner hidden" id="errorBanner"></div>
@@ -358,7 +457,18 @@
         let state = {
             columns: [], rows: [], totalRows: 0, page: 1, pageSize: 50,
             totalPages: 1, sortColumn: null, sortDirection: null, executionTimeMs: 0, tableName: 'Table',
+            primaryKeys: [],
         };
+
+        // Editing state
+        var pendingChanges = [];
+        var newRows = [];
+        var deletedRowIdxs = new Set();
+        var editedCells = {};
+        var canEdit = false;
+
+        // FK navigation
+        var fkMap = {}; // column => { toTable, toColumn }
 
         const tableName      = document.getElementById('tableName');
         const searchInput    = document.getElementById('searchInput');
@@ -375,6 +485,13 @@
         const statusPage     = document.getElementById('statusPage');
         const statusExecTime = document.getElementById('statusExecTime');
         const copyToast      = document.getElementById('copyToast');
+        const addRowBtn      = document.getElementById('addRowBtn');
+        const deleteRowsBtn  = document.getElementById('deleteRowsBtn');
+        const changesBar     = document.getElementById('changesBar');
+        const changesCount   = document.getElementById('changesCount');
+        const saveBtn        = document.getElementById('saveBtn');
+        const discardBtn     = document.getElementById('discardBtn');
+        const noPkMsg        = document.getElementById('noPkMsg');
 
         function esc(str) { if (str === null || str === undefined) return str; return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
         function fmtNum(n) { return Number(n).toLocaleString(); }
@@ -390,33 +507,96 @@
         }
 
         function renderHead() {
-            let html = '<tr><th class="row-num">#</th>';
+            let html = '<tr>';
+            if (canEdit) html += '<th class="check-col"><input type="checkbox" id="selectAll" title="Select all"></th>';
+            html += '<th class="row-num">#</th>';
             state.columns.forEach(function(col) {
                 let arrow = '';
                 if (state.sortColumn === col) arrow = state.sortDirection === 'ASC' ? '<span class="sort-arrow">&#9650;</span>' : '<span class="sort-arrow">&#9660;</span>';
-                html += '<th data-column="' + esc(col) + '">' + esc(col) + arrow + '</th>';
+                var isPk = state.primaryKeys.indexOf(col) >= 0;
+                html += '<th data-column="' + esc(col) + '">' + (isPk ? '&#128273; ' : '') + esc(col) + arrow + '</th>';
             });
             html += '</tr>';
             gridHead.innerHTML = html;
+
+            if (canEdit) {
+                var selectAll = document.getElementById('selectAll');
+                if (selectAll) {
+                    selectAll.addEventListener('change', function() {
+                        var boxes = gridBody.querySelectorAll('.row-check');
+                        boxes.forEach(function(b) { b.checked = selectAll.checked; });
+                        updateDeleteBtn();
+                    });
+                }
+            }
         }
 
         function renderBody() {
-            if (!state.rows || state.rows.length === 0) { gridBody.innerHTML = ''; emptyState.classList.remove('hidden'); return; }
+            var allRows = newRows.concat(state.rows || []);
+            if (allRows.length === 0) { gridBody.innerHTML = ''; emptyState.classList.remove('hidden'); return; }
             emptyState.classList.add('hidden');
-            const startIdx = (state.page - 1) * state.pageSize;
-            let html = '';
-            state.rows.forEach(function(row, i) {
-                html += '<tr><td class="row-num">' + (startIdx + i + 1) + '</td>';
+            var startIdx = (state.page - 1) * state.pageSize;
+            var html = '';
+
+            // Render new rows first
+            newRows.forEach(function(row, ni) {
+                html += '<tr class="row-new" data-newrow="' + ni + '">';
+                if (canEdit) html += '<td class="check-col"><input type="checkbox" class="row-check" data-newrow="' + ni + '"></td>';
+                html += '<td class="row-num">+</td>';
                 state.columns.forEach(function(col) {
-                    const val = row[col];
-                    if (val === null || val === undefined) html += '<td class="cell-null" data-raw="">NULL</td>';
-                    else if (isBool(val)) html += '<td class="cell-boolean" data-raw="' + esc(val) + '">' + esc(val) + '</td>';
-                    else if (isNum(val)) html += '<td class="cell-number" data-raw="' + esc(val) + '">' + esc(val) + '</td>';
-                    else html += '<td data-raw="' + esc(val) + '">' + esc(val) + '</td>';
+                    var val = row[col] !== undefined ? row[col] : '';
+                    html += '<td class="editable" data-col="' + esc(col) + '" data-newrow="' + ni + '" data-raw="' + esc(val) + '">' + (val === '' ? '<span style="opacity:0.3">click to edit</span>' : esc(val)) + '</td>';
+                });
+                html += '</tr>';
+            });
+
+            // Render existing rows
+            (state.rows || []).forEach(function(row, i) {
+                var isDeleted = deletedRowIdxs.has(i);
+                html += '<tr' + (isDeleted ? ' class="row-deleted"' : '') + ' data-rowidx="' + i + '">';
+                if (canEdit) html += '<td class="check-col"><input type="checkbox" class="row-check" data-rowidx="' + i + '"' + (isDeleted ? ' checked disabled' : '') + '></td>';
+                html += '<td class="row-num">' + (startIdx + i + 1) + '</td>';
+                state.columns.forEach(function(col) {
+                    var cellKey = i + ':' + col;
+                    var val = editedCells[cellKey] !== undefined ? editedCells[cellKey] : row[col];
+                    var isModified = editedCells[cellKey] !== undefined;
+                    var isPk = state.primaryKeys.indexOf(col) >= 0;
+                    var cls = canEdit && !isDeleted && !isPk ? ' editable' : '';
+                    if (isModified) cls += ' cell-modified';
+
+                    var isFk = fkMap[col] && val !== null && val !== undefined;
+                    var fkAttr = isFk ? ' data-fk-table="' + esc(fkMap[col].toTable) + '" data-fk-col="' + esc(fkMap[col].toColumn) + '"' : '';
+                    var fkCls = isFk ? ' cell-fk' : '';
+
+                    if (val === null || val === undefined) html += '<td class="cell-null' + cls + '" data-col="' + esc(col) + '" data-rowidx="' + i + '" data-raw="">NULL</td>';
+                    else if (isFk) html += '<td class="cell-fk' + cls + '" data-col="' + esc(col) + '" data-rowidx="' + i + '" data-raw="' + esc(val) + '"' + fkAttr + '>' + esc(val) + ' &#8599;</td>';
+                    else if (isBool(val)) html += '<td class="cell-boolean' + cls + '" data-col="' + esc(col) + '" data-rowidx="' + i + '" data-raw="' + esc(val) + '">' + esc(val) + '</td>';
+                    else if (isNum(val)) html += '<td class="cell-number' + cls + '" data-col="' + esc(col) + '" data-rowidx="' + i + '" data-raw="' + esc(val) + '">' + esc(val) + '</td>';
+                    else html += '<td' + (cls ? ' class="' + cls.trim() + '"' : '') + ' data-col="' + esc(col) + '" data-rowidx="' + i + '" data-raw="' + esc(val) + '">' + esc(val) + '</td>';
                 });
                 html += '</tr>';
             });
             gridBody.innerHTML = html;
+
+            // Attach checkbox listeners
+            gridBody.querySelectorAll('.row-check').forEach(function(cb) {
+                cb.addEventListener('change', updateDeleteBtn);
+            });
+        }
+
+        function updateDeleteBtn() {
+            var checked = gridBody.querySelectorAll('.row-check:checked').length;
+            deleteRowsBtn.disabled = checked === 0;
+        }
+
+        function updateChangesBar() {
+            var count = Object.keys(editedCells).length + newRows.length + deletedRowIdxs.size;
+            if (count > 0) {
+                changesBar.classList.add('active');
+                changesCount.textContent = count + ' pending change' + (count > 1 ? 's' : '');
+            } else {
+                changesBar.classList.remove('active');
+            }
         }
 
         function renderPagination() {
@@ -461,13 +641,170 @@
             showLoading(); send({ type: 'sort', column: th.getAttribute('data-column') });
         });
 
+        // FK navigation click
+        gridBody.addEventListener('click', function(e) {
+            var fkCell = e.target.closest('td.cell-fk');
+            if (fkCell) {
+                var toTable = fkCell.getAttribute('data-fk-table');
+                var toCol = fkCell.getAttribute('data-fk-col');
+                var val = fkCell.getAttribute('data-raw');
+                if (toTable && toCol && val) {
+                    send({ type: 'navigateFK', toTable: toTable, toColumn: toCol, value: val });
+                    return;
+                }
+            }
+        });
+
         let clickedCell = null;
         gridBody.addEventListener('click', function(e) {
-            var td = e.target.closest('td:not(.row-num)'); if (!td) return;
+            var td = e.target.closest('td:not(.row-num):not(.check-col):not(.cell-fk)'); if (!td) return;
             if (clickedCell) clickedCell.classList.remove('cell-clicked');
             td.classList.add('cell-clicked'); clickedCell = td;
             var raw = td.getAttribute('data-raw');
-            if (raw !== null && raw !== '') navigator.clipboard.writeText(raw).then(function() { showToast('Copied to clipboard'); }).catch(function() {});
+            if (raw !== null && raw !== '' && !td.classList.contains('editing')) {
+                navigator.clipboard.writeText(raw).then(function() { showToast('Copied to clipboard'); }).catch(function() {});
+            }
+        });
+
+        // Double-click to edit cell
+        gridBody.addEventListener('dblclick', function(e) {
+            var td = e.target.closest('td.editable');
+            if (!td || td.classList.contains('editing')) return;
+            var tr = td.closest('tr');
+            if (tr && tr.classList.contains('row-deleted')) return;
+
+            var col = td.getAttribute('data-col');
+            var rowIdx = td.getAttribute('data-rowidx');
+            var newRowIdx = td.getAttribute('data-newrow');
+            var currentVal = td.getAttribute('data-raw') || '';
+
+            td.classList.add('editing');
+            td.innerHTML = '<input type="text" value="' + esc(currentVal) + '" />';
+            var input = td.querySelector('input');
+            input.focus();
+            input.select();
+
+            function finishEdit() {
+                var newVal = input.value;
+                td.classList.remove('editing');
+
+                if (newRowIdx !== null && newRowIdx !== undefined && newRowIdx !== '') {
+                    // Editing a new row
+                    var ni = parseInt(newRowIdx, 10);
+                    newRows[ni][col] = newVal;
+                    td.setAttribute('data-raw', newVal);
+                    td.textContent = newVal || 'click to edit';
+                    if (!newVal) td.innerHTML = '<span style="opacity:0.3">click to edit</span>';
+                } else if (rowIdx !== null && rowIdx !== undefined && rowIdx !== '') {
+                    // Editing existing row
+                    var ri = parseInt(rowIdx, 10);
+                    var origVal = state.rows[ri][col];
+                    var origStr = origVal === null || origVal === undefined ? '' : String(origVal);
+
+                    if (newVal !== origStr) {
+                        editedCells[ri + ':' + col] = newVal === '' ? null : newVal;
+                        td.classList.add('cell-modified');
+                    } else {
+                        delete editedCells[ri + ':' + col];
+                        td.classList.remove('cell-modified');
+                    }
+                    td.setAttribute('data-raw', newVal);
+                    if (newVal === '' || newVal === null) {
+                        td.innerHTML = '<span class="cell-null">NULL</span>';
+                    } else {
+                        td.textContent = newVal;
+                    }
+                }
+                updateChangesBar();
+            }
+
+            input.addEventListener('blur', finishEdit);
+            input.addEventListener('keydown', function(ev) {
+                if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+                if (ev.key === 'Escape') { input.value = currentVal; input.blur(); }
+                if (ev.key === 'Tab') {
+                    ev.preventDefault();
+                    input.blur();
+                    // Move to next editable cell
+                    var nextTd = td.nextElementSibling;
+                    while (nextTd && !nextTd.classList.contains('editable')) nextTd = nextTd.nextElementSibling;
+                    if (nextTd) nextTd.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+                }
+            });
+        });
+
+        // Add Row button
+        addRowBtn.addEventListener('click', function() {
+            if (!canEdit) { showToast('Editing disabled — no primary key'); return; }
+            var emptyRow = {};
+            state.columns.forEach(function(col) { emptyRow[col] = ''; });
+            newRows.push(emptyRow);
+            renderBody();
+            updateChangesBar();
+            // Scroll to top to see new row
+            tableContainer.scrollTop = 0;
+        });
+
+        // Delete Selected button
+        deleteRowsBtn.addEventListener('click', function() {
+            if (!canEdit) return;
+            gridBody.querySelectorAll('.row-check:checked').forEach(function(cb) {
+                var ri = cb.getAttribute('data-rowidx');
+                var ni = cb.getAttribute('data-newrow');
+                if (ri !== null && ri !== '') {
+                    deletedRowIdxs.add(parseInt(ri, 10));
+                } else if (ni !== null && ni !== '') {
+                    newRows.splice(parseInt(ni, 10), 1);
+                }
+            });
+            renderBody();
+            updateChangesBar();
+            updateDeleteBtn();
+        });
+
+        // Save Changes
+        saveBtn.addEventListener('click', function() {
+            var changes = [];
+
+            // Edits
+            Object.keys(editedCells).forEach(function(key) {
+                var parts = key.split(':');
+                var ri = parseInt(parts[0], 10);
+                var col = parts.slice(1).join(':');
+                var row = state.rows[ri];
+                var pkValues = {};
+                state.primaryKeys.forEach(function(pk) { pkValues[pk] = row[pk]; });
+                changes.push({ type: 'update', pkValues: pkValues, column: col, value: editedCells[key] });
+            });
+
+            // Deletes
+            deletedRowIdxs.forEach(function(ri) {
+                var row = state.rows[ri];
+                var pkValues = {};
+                state.primaryKeys.forEach(function(pk) { pkValues[pk] = row[pk]; });
+                changes.push({ type: 'delete', pkValues: pkValues });
+            });
+
+            // Inserts
+            newRows.forEach(function(row) {
+                var hasData = state.columns.some(function(c) { return row[c] !== '' && row[c] !== undefined; });
+                if (hasData) changes.push({ type: 'insert', row: row });
+            });
+
+            if (changes.length === 0) return;
+            showLoading();
+            send({ type: 'saveChanges', changes: changes });
+        });
+
+        // Discard Changes
+        discardBtn.addEventListener('click', function() {
+            editedCells = {};
+            newRows = [];
+            deletedRowIdxs.clear();
+            renderBody();
+            updateChangesBar();
+            updateDeleteBtn();
+            showToast('Changes discarded');
         });
 
         pagination.addEventListener('click', function(e) {
@@ -495,8 +832,29 @@
                     state.page = msg.page || 1; state.pageSize = msg.pageSize || 50; state.totalPages = msg.totalPages || 1;
                     state.sortColumn = msg.sortColumn || null; state.sortDirection = msg.sortDirection || null;
                     state.executionTimeMs = msg.executionTimeMs || 0; state.tableName = msg.tableName || 'Table';
+                    state.primaryKeys = msg.primaryKeys || [];
+                    canEdit = state.primaryKeys.length > 0;
+                    fkMap = {};
+                    (msg.foreignKeys || []).forEach(function(fk) { fkMap[fk.fromColumn] = { toTable: fk.toTable, toColumn: fk.toColumn }; });
+                    noPkMsg.classList.toggle('hidden', canEdit);
+                    addRowBtn.style.display = canEdit ? '' : 'none';
+                    deleteRowsBtn.style.display = canEdit ? '' : 'none';
+                    // Clear pending changes on data reload
+                    editedCells = {}; newRows = []; deletedRowIdxs.clear();
+                    updateChangesBar();
                     render(); tableContainer.scrollTop = 0; break;
                 case 'error': hideLoading(); showError(msg.message || 'An unknown error occurred.'); break;
+                case 'saveResult':
+                    hideLoading();
+                    if (msg.success) {
+                        showToast(msg.successCount + ' change' + (msg.successCount > 1 ? 's' : '') + ' saved!');
+                        editedCells = {}; newRows = []; deletedRowIdxs.clear();
+                        updateChangesBar();
+                    } else {
+                        showError('Save error: ' + (msg.error || 'Unknown error'));
+                        if (msg.successCount > 0) showToast(msg.successCount + ' changes saved, some failed');
+                    }
+                    break;
             }
         });
 

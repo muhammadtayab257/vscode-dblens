@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta
         http-equiv="Content-Security-Policy"
-        content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';"
+        content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline' https: vscode-resource: vscode-webview-resource:;"
     />
     <title>SQL Editor</title>
     <style>
@@ -734,6 +734,62 @@
 
         .hidden { display: none !important; }
 
+        /* ── Chart Panel ──────────────────────────────────── */
+        .chart-panel {
+            display: none;
+            flex-direction: column;
+            flex: 1;
+            overflow: auto;
+            padding: 14px;
+            gap: 10px;
+        }
+
+        .chart-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .chart-controls label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--vscode-descriptionForeground);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        .chart-controls select {
+            padding: 4px 8px;
+            background: var(--vscode-input-background);
+            border: 1px solid var(--vscode-input-border, #444);
+            border-radius: 5px;
+            color: var(--vscode-input-foreground);
+            font-size: 12px;
+            font-family: inherit;
+            outline: none;
+            cursor: pointer;
+        }
+        .chart-controls select:focus { border-color: var(--vscode-focusBorder); }
+
+        .chart-canvas-wrapper {
+            flex: 1;
+            position: relative;
+            min-height: 250px;
+            height: 300px;
+            background: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-widget-border, #333);
+            border-radius: 6px;
+            padding: 10px;
+        }
+
+        .chart-empty {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            color: var(--vscode-descriptionForeground);
+            font-size: 13px;
+        }
+
         /* ── Toast ─────────────────────────────────────────── */
         .toast {
             position: fixed;
@@ -882,6 +938,7 @@
         <div class="results-pane" id="resultsPane">
             <div class="results-header" id="resultsHeader">
                 <span class="tab active" data-tab="results" id="tabResults">Results</span>
+                <span class="tab" data-tab="chart" id="tabChart">&#128202; Chart</span>
                 <span class="tab" data-tab="history" id="tabHistory">History</span>
                 <div class="results-meta" id="resultsStats">
                     <span id="statRows"></span>
@@ -915,6 +972,27 @@
                 </table>
             </div>
 
+            <!-- Chart Tab -->
+            <div class="chart-panel" id="chartContent">
+                <div class="chart-controls">
+                    <label>Type</label>
+                    <select id="chartType">
+                        <option value="bar">Bar</option>
+                        <option value="line">Line</option>
+                        <option value="pie">Pie</option>
+                        <option value="doughnut">Doughnut</option>
+                    </select>
+                    <label>X Axis</label>
+                    <select id="chartXAxis"></select>
+                    <label>Y Axis</label>
+                    <select id="chartYAxis"></select>
+                </div>
+                <div class="chart-canvas-wrapper">
+                    <canvas id="chartCanvas"></canvas>
+                </div>
+                <div class="chart-empty hidden" id="chartEmpty">Run a query first to create charts</div>
+            </div>
+
             <!-- History Tab -->
             <div class="history-list hidden" id="historyContent">
                 <div class="history-empty" id="historyEmpty">No query history yet</div>
@@ -929,6 +1007,7 @@
 <!-- Toast -->
 <div class="toast" id="copyToast">Copied!</div>
 
+<script src="{{chartJsUri}}"></script>
 <script>
     const vscode = acquireVsCodeApi();
 
@@ -994,24 +1073,30 @@
     });
 
     // ── Tabs ────────────────────────────────────────
+    const tabChart = document.getElementById('tabChart');
+    const chartContent = document.getElementById('chartContent');
+    const chartEmpty = document.getElementById('chartEmpty');
+
     function showTab(tab) {
-        if (tab === 'results') {
-            tabResults.classList.add('active');
-            tabHistory.classList.remove('active');
-            resultsContent.classList.remove('hidden');
-            historyContent.classList.add('hidden');
-            resultsStats.classList.remove('hidden');
-        } else {
-            tabResults.classList.remove('active');
-            tabHistory.classList.add('active');
-            resultsContent.classList.add('hidden');
-            historyContent.classList.remove('hidden');
-            resultsStats.classList.add('hidden');
-            renderHistory();
+        tabResults.classList.toggle('active', tab === 'results');
+        tabChart.classList.toggle('active', tab === 'chart');
+        tabHistory.classList.toggle('active', tab === 'history');
+
+        // Show/hide content areas
+        resultsContent.style.display = tab === 'results' ? '' : 'none';
+        chartContent.style.display = tab === 'chart' ? 'flex' : 'none';
+        historyContent.style.display = tab === 'history' ? '' : 'none';
+        resultsStats.style.display = tab === 'history' ? 'none' : '';
+
+        if (tab === 'history') renderHistory();
+        if (tab === 'chart') {
+            populateChartSelectors();
+            setTimeout(renderChart, 50);
         }
     }
 
     tabResults.addEventListener('click', function() { showTab('results'); });
+    tabChart.addEventListener('click', function() { showTab('chart'); });
     tabHistory.addEventListener('click', function() { showTab('history'); });
 
     // ── Autocomplete ────────────────────────────────
@@ -1274,6 +1359,7 @@
         statTime.innerHTML = '<span class="val">' + fmtTime(data.executionTimeMs) + '</span>';
 
         addHistory(data.sql, rowCount, data.executionTimeMs, null);
+        populateChartSelectors();
 
         if (columns.length === 0) {
             emptyState.classList.remove('hidden');
@@ -1618,6 +1704,118 @@
     connSelect.addEventListener('change', function() {
         if (connSelect.value) vscode.postMessage({ type: 'fetchSchema', connId: connSelect.value });
     });
+
+    // ── Chart ────────────────────────────────────────
+    var chartInstance = null;
+    var chartTypeSelect = document.getElementById('chartType');
+    var chartXAxis = document.getElementById('chartXAxis');
+    var chartYAxis = document.getElementById('chartYAxis');
+    var chartCanvas = document.getElementById('chartCanvas');
+
+    function populateChartSelectors() {
+        if (currentColumns.length === 0) return;
+        var xHtml = '';
+        var yHtml = '';
+        currentColumns.forEach(function(col) {
+            xHtml += '<option value="' + esc(col) + '">' + esc(col) + '</option>';
+            yHtml += '<option value="' + esc(col) + '">' + esc(col) + '</option>';
+        });
+        chartXAxis.innerHTML = xHtml;
+        chartYAxis.innerHTML = yHtml;
+        // Auto-select: first string-like column for X, first number-like column for Y
+        if (currentRows.length > 0) {
+            var firstNumCol = null;
+            var firstStrCol = null;
+            currentColumns.forEach(function(col) {
+                var val = currentRows[0][col];
+                if (firstNumCol === null && val !== null && !isNaN(Number(val))) firstNumCol = col;
+                if (firstStrCol === null && (val === null || isNaN(Number(val)))) firstStrCol = col;
+            });
+            if (firstStrCol) chartXAxis.value = firstStrCol;
+            if (firstNumCol) chartYAxis.value = firstNumCol;
+        }
+    }
+
+    function renderChart() {
+        if (currentColumns.length === 0 || currentRows.length === 0) {
+            chartEmpty.classList.remove('hidden');
+            if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+            return;
+        }
+        chartEmpty.classList.add('hidden');
+
+        var xCol = chartXAxis.value;
+        var yCol = chartYAxis.value;
+        if (!xCol || !yCol) return;
+
+        var labels = currentRows.map(function(r) {
+            var v = r[xCol];
+            if (v === null || v === undefined) return 'NULL';
+            return String(v).length > 20 ? String(v).substring(0, 20) + '...' : String(v);
+        });
+        var data = currentRows.map(function(r) {
+            var v = r[yCol];
+            if (v === null || v === undefined) return 0;
+            var n = Number(v);
+            return isNaN(n) ? 0 : n;
+        });
+
+        var type = chartTypeSelect.value;
+        var isPie = type === 'pie' || type === 'doughnut';
+
+        // Generate colors
+        var colors = data.map(function(_, i) {
+            var hue = (i * 37 + 200) % 360;
+            return 'hsla(' + hue + ', 70%, 55%, 0.8)';
+        });
+        var borderColors = data.map(function(_, i) {
+            var hue = (i * 37 + 200) % 360;
+            return 'hsla(' + hue + ', 70%, 45%, 1)';
+        });
+
+        if (chartInstance) chartInstance.destroy();
+
+        // Detect dark theme
+        var isDark = getComputedStyle(document.body).backgroundColor.includes('30') ||
+                     getComputedStyle(document.body).backgroundColor.includes('20') ||
+                     getComputedStyle(document.body).backgroundColor.includes('1e');
+        var gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+        var textColor = isDark ? '#aaa' : '#555';
+
+        chartInstance = new Chart(chartCanvas, {
+            type: type,
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: yCol,
+                    data: data,
+                    backgroundColor: isPie ? colors : colors[0],
+                    borderColor: isPie ? borderColors : borderColors[0],
+                    borderWidth: isPie ? 2 : 2,
+                    borderRadius: type === 'bar' ? 4 : 0,
+                    tension: 0.3,
+                    fill: type === 'line',
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 400 },
+                plugins: {
+                    legend: { display: isPie, labels: { color: textColor, font: { size: 11 } } },
+                    tooltip: { backgroundColor: 'rgba(30,30,30,0.9)', titleFont: { size: 12 }, bodyFont: { size: 11 } },
+                },
+                scales: isPie ? {} : {
+                    x: { ticks: { color: textColor, font: { size: 10 }, maxRotation: 45 }, grid: { color: gridColor } },
+                    y: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor }, beginAtZero: true },
+                },
+            }
+        });
+    }
+
+    chartTypeSelect.addEventListener('change', renderChart);
+    chartXAxis.addEventListener('change', renderChart);
+    chartYAxis.addEventListener('change', renderChart);
 
     // ── Init ────────────────────────────────────────
     updateLineNumbers();

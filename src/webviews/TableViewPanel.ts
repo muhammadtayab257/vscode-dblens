@@ -16,6 +16,8 @@ export class TableViewPanel {
   private filter?: string;
   private totalRows = 0;
   private disposed = false;
+  private primaryKeys: string[] = [];
+  private foreignKeys: { fromColumn: string; toTable: string; toColumn: string }[] = [];
 
   private constructor(
     panel: vscode.WebviewPanel,
@@ -83,6 +85,21 @@ export class TableViewPanel {
     }
 
     try {
+      // Fetch primary keys and foreign keys
+      if (this.primaryKeys.length === 0) {
+        try {
+          this.primaryKeys = await client.getPrimaryKeys(this.tableName);
+        } catch { /* no PK support */ }
+      }
+      if (this.foreignKeys.length === 0) {
+        try {
+          const allFks = await client.getForeignKeys();
+          this.foreignKeys = allFks
+            .filter(fk => fk.fromTable === this.tableName)
+            .map(fk => ({ fromColumn: fk.fromColumn, toTable: fk.toTable, toColumn: fk.toColumn }));
+        } catch { /* no FK support */ }
+      }
+
       this.totalRows = await client.getTableRowCount(this.tableName);
       const result = await client.getTableData(
         this.tableName,
@@ -110,6 +127,8 @@ export class TableViewPanel {
         sortDirection: this.sortDirection,
         executionTimeMs: result.executionTimeMs,
         tableName: this.tableName,
+        primaryKeys: this.primaryKeys,
+        foreignKeys: this.foreignKeys,
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -117,7 +136,14 @@ export class TableViewPanel {
     }
   }
 
-  private async handleMessage(msg: { type: string; page?: number; column?: string; filter?: string; format?: string }): Promise<void> {
+  private async handleMessage(msg: {
+    type: string;
+    page?: number;
+    column?: string;
+    filter?: string;
+    format?: string;
+    changes?: { type: string; pkValues?: Record<string, unknown>; column?: string; value?: unknown; row?: Record<string, unknown> }[];
+  }): Promise<void> {
     switch (msg.type) {
       case 'nextPage':
         if ((this.currentPage + 1) * PAGE_SIZE < this.totalRows) {
@@ -160,7 +186,92 @@ export class TableViewPanel {
       case 'export':
         await this.exportCSV();
         break;
+      case 'saveChanges':
+        await this.saveChanges(msg.changes || []);
+        break;
+      case 'navigateFK': {
+        const toTable = (msg as { type: string; toTable?: string; toColumn?: string; value?: unknown }).toTable;
+        const toColumn = (msg as { type: string; toTable?: string; toColumn?: string; value?: unknown }).toColumn;
+        const value = (msg as { type: string; toTable?: string; toColumn?: string; value?: unknown }).value;
+        if (toTable && toColumn && value !== undefined) {
+          const panel = TableViewPanel.show(this.connectionManager, this.connectionId, toTable, this.extensionUri);
+          // Set filter to the FK value
+          const conn = this.connectionManager.getConnection(this.connectionId);
+          const q = conn?.type === 'mysql' ? '`' : '"';
+          panel.filter = `${q}${toColumn}${q} = '${String(value).replace(/'/g, "''")}'`;
+          panel.currentPage = 0;
+          panel.loadData();
+        }
+        break;
+      }
     }
+  }
+
+  private async saveChanges(changes: { type: string; pkValues?: Record<string, unknown>; column?: string; value?: unknown; row?: Record<string, unknown> }[]): Promise<void> {
+    const client = this.connectionManager.getClient(this.connectionId);
+    if (!client) {
+      this.panel.webview.postMessage({ type: 'saveResult', success: false, error: 'Connection lost.' });
+      return;
+    }
+
+    const conn = this.connectionManager.getConnection(this.connectionId);
+    const dbType = conn?.type || 'postgresql';
+    const q = dbType === 'mysql' ? '`' : '"';
+    const tbl = `${q}${this.tableName}${q}`;
+
+    const errors: string[] = [];
+    let successCount = 0;
+
+    for (const change of changes) {
+      try {
+        if (change.type === 'update' && change.pkValues && change.column !== undefined) {
+          const whereClause = this.buildWhereClause(change.pkValues, q, dbType);
+          const val = change.value === null || change.value === '' ? 'NULL' : `'${String(change.value).replace(/'/g, "''")}'`;
+          const sql = `UPDATE ${tbl} SET ${q}${change.column}${q} = ${val} WHERE ${whereClause}`;
+          const result = await client.executeQuery(sql);
+          if (result.error) { errors.push(`UPDATE ${change.column}: ${result.error}`); }
+          else { successCount++; }
+        } else if (change.type === 'delete' && change.pkValues) {
+          const whereClause = this.buildWhereClause(change.pkValues, q, dbType);
+          const sql = `DELETE FROM ${tbl} WHERE ${whereClause}`;
+          const result = await client.executeQuery(sql);
+          if (result.error) { errors.push(`DELETE: ${result.error}`); }
+          else { successCount++; }
+        } else if (change.type === 'insert' && change.row) {
+          const cols = Object.keys(change.row).filter(k => change.row![k] !== undefined && change.row![k] !== '');
+          if (cols.length === 0) { continue; }
+          const colNames = cols.map(c => `${q}${c}${q}`).join(', ');
+          const values = cols.map(c => {
+            const v = change.row![c];
+            if (v === null) { return 'NULL'; }
+            return `'${String(v).replace(/'/g, "''")}'`;
+          }).join(', ');
+          const sql = `INSERT INTO ${tbl} (${colNames}) VALUES (${values})`;
+          const result = await client.executeQuery(sql);
+          if (result.error) { errors.push(`INSERT: ${result.error}`); }
+          else { successCount++; }
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        errors.push(message);
+      }
+    }
+
+    if (errors.length > 0) {
+      this.panel.webview.postMessage({ type: 'saveResult', success: false, error: errors.join('\n'), successCount });
+    } else {
+      this.panel.webview.postMessage({ type: 'saveResult', success: true, successCount });
+    }
+
+    // Reload data after changes
+    await this.loadData();
+  }
+
+  private buildWhereClause(pkValues: Record<string, unknown>, q: string, dbType: string): string {
+    return Object.entries(pkValues).map(([col, val]) => {
+      if (val === null || val === undefined) { return `${q}${col}${q} IS NULL`; }
+      return `${q}${col}${q} = '${String(val).replace(/'/g, "''")}'`;
+    }).join(' AND ');
   }
 
   async exportCSV(): Promise<void> {

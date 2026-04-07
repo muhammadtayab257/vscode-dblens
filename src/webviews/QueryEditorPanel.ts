@@ -43,7 +43,10 @@ export class QueryEditorPanel {
       {
         enableScripts: true,
         retainContextWhenHidden: true,
-        localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'src', 'webviews', 'html')],
+        localResourceRoots: [
+          vscode.Uri.joinPath(extensionUri, 'src', 'webviews', 'html'),
+          vscode.Uri.joinPath(extensionUri, 'lib'),
+        ],
       }
     );
 
@@ -545,8 +548,13 @@ export class QueryEditorPanel {
 
   private getHtml(): string {
     const htmlPath = path.join(this.extensionUri.fsPath, 'src', 'webviews', 'html', 'queryEditor.html');
+    const chartJsUri = this.panel.webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, 'lib', 'chart.min.js')
+    );
     try {
-      return fs.readFileSync(htmlPath, 'utf-8');
+      let html = fs.readFileSync(htmlPath, 'utf-8');
+      html = html.replace('{{chartJsUri}}', chartJsUri.toString());
+      return html;
     } catch {
       return '<!DOCTYPE html><html><body><p>Error loading SQL editor.</p></body></html>';
     }

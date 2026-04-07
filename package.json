@@ -2,7 +2,7 @@
   "name": "dblens",
   "displayName": "DBLens",
   "description": "Connect to PostgreSQL, MySQL, and SQLite databases directly inside VS Code. Browse tables and run queries.",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "publisher": "dblens",
   "license": "MIT",
   "icon": "resources/icon.png",

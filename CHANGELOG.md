@@ -30,6 +30,24 @@ All notable changes to the **DBLens** extension will be documented in this file.
   - VS Code settings for API key and model selection
   - In-UI API key input (no need to dig through settings)
   - Model picker: gpt-4o-mini, gpt-4o, gpt-3.5-turbo
+- **Charts** (powered by Chart.js)
+  - Bar, Line, Pie, and Doughnut chart types
+  - Available in SQL Editor via Chart tab
+  - Auto-detects best X/Y columns from query results
+  - Dark theme compatible with smooth animations
+  - Switch chart type and axes on the fly
+- **Inline Data Editing**
+  - Double-click any cell to edit its value
+  - Add new rows with "+ Add Row" button
+  - Delete rows with checkbox selection
+  - Yellow highlight for edits, green for new rows, strikethrough for deleted
+  - Save/Discard changes bar with pending change count
+  - Primary key columns protected from editing
+  - Tables without primary keys show read-only mode
+- **Foreign Key Navigation**
+  - FK columns displayed as clickable blue links with arrow icon
+  - Click any FK value to jump to the related row in the target table
+  - Automatically opens target table filtered to the matching row
 
 ### Changed
 - **Redesigned UI** across all panels (SQL Editor, Table View, Query Results)
